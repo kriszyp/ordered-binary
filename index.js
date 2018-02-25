@@ -86,7 +86,7 @@ exports.toBufferKey = function(key) {
     throw new Error('Can not serialize key ' + key)
   }
 }
-exports.fromBufferKey = function(buffer, multipart) {
+function fromBufferKey(buffer, multipart) {
   let controlByte = buffer[0]
   let consumed, value
   switch (controlByte) {
@@ -152,3 +152,4 @@ exports.fromBufferKey = function(buffer, multipart) {
   return value
 }
 
+exports.fromBufferKey = fromBufferKey

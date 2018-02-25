@@ -9,14 +9,12 @@
     "url": "http://github.com/kriszyp/ordered-binary"
   },
   "scripts": {
-    "test": "./node_modules/.bin/mocha tests/unit -u tdd"
+    "test": "./node_modules/.bin/mocha tests -u tdd"
   },
   "main": "./index.js",
   "typings": "./index.d.ts",
-  "dependencies": {
-  },
-  "optionalDependencies": {
-  },
+  "dependencies": {},
+  "optionalDependencies": {},
   "devDependencies": {
     "mocha": "^4",
     "chai": "^4",
