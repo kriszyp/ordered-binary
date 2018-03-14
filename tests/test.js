@@ -65,6 +65,9 @@ suite('key buffers', () => {
     assert.deepEqual(fromBufferKey(
       Buffer.concat([toBufferKey(-0.2525), Buffer.from([30]), toBufferKey('second')]), true),
       [-0.2525, 'second'])
+    assert.deepEqual(fromBufferKey(
+      Buffer.concat([toBufferKey(-0.2525), Buffer.from([30]), toBufferKey('2nd'), Buffer.from([30]), toBufferKey('3rd')]), true),
+      [-0.2525, '2nd', '3rd'])
   })
 
   test('multipart comparison', () => {

@@ -1,6 +1,6 @@
 /*
 control character types:
-1 - table metadata
+1 - metadata
 14 - true
 15 - false
 17 - number <= -2^48
@@ -82,74 +82,103 @@ exports.toBufferKey = function(key) {
     let buffer = Buffer.allocUnsafe(1)
     buffer[0] = key ? 15 : 14 // SHIFT IN/OUT control characters
     return buffer
+  } else if (key instanceof Metadata) {
+    let buffer = Buffer.allocUnsafe(1)
+    buffer[0] = key.code
+    return buffer
   } else {
     throw new Error('Can not serialize key ' + key)
   }
 }
+
 function fromBufferKey(buffer, multipart) {
-  let controlByte = buffer[0]
-  let consumed, value
-  switch (controlByte) {
-    case 18:
-      // negative number
-      for (let i = 1; i < 7; i++) {
-        buffer[i] = buffer[i] ^ 255
-      }
-      // fall through
-    case 19: // number
-      value = (buffer[3] << 24) + (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
-      if (buffer[2]) {
-        value += buffer[2] * MAX_32_BITS
-      }
-      if (buffer[1]) {
-        value += buffer[1] * MAX_40_BITS
-      }
-      consumed = 7
-      let negative = controlByte === 18
-      let decimal
-      do {
-        decimal = buffer[consumed++]
-        if (negative) {
-          decimal ^= 255
+  let value, values
+  do {
+    let consumed, controlByte = buffer[0]
+    switch (controlByte) {
+      case 18:
+        // negative number
+        for (let i = 1; i < 7; i++) {
+          buffer[i] = buffer[i] ^ 255
         }
-        if (decimal)
-          value += (decimal >> 1) / 100**(consumed - 7)
-      } while (decimal & 1)
-      if (negative) {
-        value = -value
-      }
-      break
-    case 14:
-      consumed = 1
-      value = false
-      break
-    case 15:
-      consumed = 1
-      value = true
-      break
-    default:
-      if (controlByte < 27) {
-        throw new Error('Unknown control byte ' + controlByte)
-      }
-      let strBuffer
-      if (multipart) {
-        consumed = buffer.indexOf(30)
-        strBuffer = buffer.slice(0, consumed)
-      } else
-        strBuffer = buffer
-      if (strBuffer[strBuffer.length - 1] == 27) {
-        // TODO: needs escaping here
-        value = strBuffer.toString()
+        // fall through
+      case 19: // number
+        value = (buffer[3] << 24) + (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
+        if (buffer[2]) {
+          value += buffer[2] * MAX_32_BITS
+        }
+        if (buffer[1]) {
+          value += buffer[1] * MAX_40_BITS
+        }
+        consumed = 7
+        let negative = controlByte === 18
+        let decimal
+        do {
+          decimal = buffer[consumed++]
+          if (negative) {
+            decimal ^= 255
+          }
+          if (decimal)
+            value += (decimal >> 1) / 100**(consumed - 7)
+        } while (decimal & 1)
+        if (negative) {
+          value = -value
+        }
+        break
+      case 14: // boolean false
+        consumed = 1
+        value = false
+        break
+      case 15: // boolean true
+        consumed = 1
+        value = true
+        break
+      case 1: case 255:// metadata, return next byte as the code
+        consumed = 1
+        value = new Metadata(controlByte)
+        break
+      default:
+        if (controlByte < 27) {
+          throw new Error('Unknown control byte ' + controlByte)
+        }
+        let strBuffer
+        if (multipart) {
+          consumed = buffer.indexOf(30)
+          if (consumed === -1) {
+            strBuffer = buffer
+            consumed = buffer.length
+          } else
+            strBuffer = buffer.slice(0, consumed)
+        } else
+          strBuffer = buffer
+        if (strBuffer[strBuffer.length - 1] == 27) {
+          // TODO: needs escaping here
+          value = strBuffer.toString()
+        } else {
+          value = strBuffer.toString()
+        }
+    }
+    if (multipart) {
+      if (!values) {
+        values = [value]
       } else {
-        value = strBuffer.toString()
+        values.push(value)
       }
-  }
-  if (multipart) {
-    if (buffer[consumed] !== 30)
-      throw new Error('Invalid separator byte')
-    return [value, fromBufferKey(buffer.slice(consumed + 1))]
-  }
+      if (buffer.length === consumed) {
+        return values // done, consumed all the values
+      }
+      if (buffer[consumed] !== 30)
+        throw new Error('Invalid separator byte')
+      buffer = buffer.slice(consumed + 1)
+    }
+  } while (multipart)
+  // single value mode
   return value
 }
 
+// code can be one byte
+function Metadata(code) {
+  this.code = code
+}
 exports.fromBufferKey = fromBufferKey
+exports.Metadata = Metadata
