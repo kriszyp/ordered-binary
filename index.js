@@ -11,6 +11,7 @@ control character types:
 30 - multipart separator
 > 31 normal string characters
 */
+const MAX_24_BITS = 2**24
 const MAX_32_BITS = 2**32
 const MAX_40_BITS = 2**40
 const MAX_48_BITS = 2**48
@@ -103,7 +104,10 @@ function fromBufferKey(buffer, multipart) {
         }
         // fall through
       case 19: // number
-        value = (buffer[3] << 24) + (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
+        value = (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
+        if (buffer[3]) {
+          value += buffer[3] * MAX_24_BITS
+        }
         if (buffer[2]) {
           value += buffer[2] * MAX_32_BITS
         }
@@ -134,8 +138,8 @@ function fromBufferKey(buffer, multipart) {
         value = true
         break
       case 1: case 255:// metadata, return next byte as the code
-        consumed = 1
-        value = new Metadata(controlByte)
+        consumed = 2
+        value = new Metadata(buffer[1])
         break
       default:
         if (controlByte < 27) {
@@ -179,6 +183,9 @@ function fromBufferKey(buffer, multipart) {
 // code can be one byte
 function Metadata(code) {
   this.code = code
+}
+Metadata.prototype.toString = function() {
+  return 'Metadata: ' + this.code
 }
 exports.fromBufferKey = fromBufferKey
 exports.Metadata = Metadata
