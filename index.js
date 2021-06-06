@@ -77,7 +77,7 @@ exports.toBufferKey = function(key) {
       }
       return Buffer.from(bufferArray)
     } else {
-      throw new Error('Unsupported number')
+      throw new Error('Unsupported number ' + key)
     }
   } else if (typeof key === 'boolean') {
     let buffer = Buffer.allocUnsafe(1)
