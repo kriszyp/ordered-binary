@@ -15,9 +15,70 @@ const MAX_24_BITS = 2**24
 const MAX_32_BITS = 2**32
 const MAX_40_BITS = 2**40
 const MAX_48_BITS = 2**48
+
+const float64Array = new Float64Array(2)
+const uint32Array = new Uint32Array(float64Array.buffer, 0, 4)
+
 /*
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
+exports.writeKey = function(key, target, position) {
+  if (typeof key === 'string') {
+    let strLength = key.length
+    if (strLength < 0x20) {
+      let i, c1, c2
+      for (i = 0; i < strLength; i++) {
+        c1 = key.charCodeAt(i)
+        if (c1 < 0x80) {
+          target[position++] = c1
+        } else if (c1 < 0x800) {
+          target[position++] = c1 >> 6 | 0xc0
+          target[position++] = c1 & 0x3f | 0x80
+        } else if (
+          (c1 & 0xfc00) === 0xd800 &&
+          ((c2 = key.charCodeAt(i + 1)) & 0xfc00) === 0xdc00
+        ) {
+          c1 = 0x10000 + ((c1 & 0x03ff) << 10) + (c2 & 0x03ff)
+          i++
+          target[position++] = c1 >> 18 | 0xf0
+          target[position++] = c1 >> 12 & 0x3f | 0x80
+          target[position++] = c1 >> 6 & 0x3f | 0x80
+          target[position++] = c1 & 0x3f | 0x80
+        } else {
+          target[position++] = c1 >> 12 | 0xe0
+          target[position++] = c1 >> 6 & 0x3f | 0x80
+          target[position++] = c1 & 0x3f | 0x80
+        }
+      }
+      return position
+    } else {
+      return position + target.utf8Write(key, position, 2000)
+    }
+  } else if (typeof key === 'number') {
+    float64Array[0] = key
+    let lowInt = uint32Array[0]
+    let highInt = uint32Array[1]
+    let length
+    if (key < 0) {
+      target[position + 8] = (~(lowInt & 0xf)) << 4
+      targetView.setInt32(1, ~((lowInt >> 4) | (highInt << 28)))
+      targetView.setInt32(0, ~(highInt >> 4) | 0x8)
+      length = 9
+    } else if (lowInt & 0xf || position > 0) {
+      target[position + 8] = (lowInt & 0xf) << 4
+      length = 9
+    } else if (lowInt & 0xfff)
+      length = 8
+    else
+      length = 6
+    let targetView = target.dataView || (target.dataView = new DataView(target, 0, target.length))
+    // switching order to go to little endian
+    targetView.setInt32(1, (lowInt >> 4) | (highInt << 28))
+    targetView.setInt32(0, (highInt >> 4) | 0x10)
+    return position + length;
+  }
+  return position
+}
 exports.toBufferKey = function(key) {
   if (typeof key === 'string') {
     if (key.charCodeAt(0) < 32) {
