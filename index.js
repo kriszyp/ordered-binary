@@ -11,72 +11,84 @@ control character types:
 30 - multipart separator
 > 31 normal string characters
 */
-const MAX_24_BITS = 2**24
-const MAX_32_BITS = 2**32
-const MAX_40_BITS = 2**40
-const MAX_48_BITS = 2**48
-
 const float64Array = new Float64Array(2)
 const uint32Array = new Uint32Array(float64Array.buffer, 0, 4)
 
 /*
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
-exports.writeKey = function writeKey(key, target, position) {
+exports.writeKey = function writeKey(key, target, position, inArray) {
 	let type = typeof key
 	if (type === 'string') {
 		let strLength = key.length
-		if (strLength < 0x20) {
+//		if (strLength < 0x40) {
 			let i, c1, c2
 			for (i = 0; i < strLength; i++) {
 				c1 = key.charCodeAt(i)
 				if (c1 < 0x80) {
-					target[position++] = c1
+					target[position++^3] = c1
 				} else if (c1 < 0x800) {
-					target[position++] = c1 >> 6 | 0xc0
-					target[position++] = c1 & 0x3f | 0x80
+					target[position++^3] = c1 >> 6 | 0xc0
+					target[position++^3] = c1 & 0x3f | 0x80
 				} else if (
 					(c1 & 0xfc00) === 0xd800 &&
 					((c2 = key.charCodeAt(i + 1)) & 0xfc00) === 0xdc00
 				) {
 					c1 = 0x10000 + ((c1 & 0x03ff) << 10) + (c2 & 0x03ff)
 					i++
-					target[position++] = c1 >> 18 | 0xf0
-					target[position++] = c1 >> 12 & 0x3f | 0x80
-					target[position++] = c1 >> 6 & 0x3f | 0x80
-					target[position++] = c1 & 0x3f | 0x80
+					target[position++^3] = c1 >> 18 | 0xf0
+					target[position++^3] = c1 >> 12 & 0x3f | 0x80
+					target[position++^3] = c1 >> 6 & 0x3f | 0x80
+					target[position++^3] = c1 & 0x3f | 0x80
 				} else {
-					target[position++] = c1 >> 12 | 0xe0
-					target[position++] = c1 >> 6 & 0x3f | 0x80
-					target[position++] = c1 & 0x3f | 0x80
+					target[position++^3] = c1 >> 12 | 0xe0
+					target[position++^3] = c1 >> 6 & 0x3f | 0x80
+					target[position++^3] = c1 & 0x3f | 0x80
 				}
 			}
+			// end at 32-bit alignment, and ensure a trailing zero if we are in an array
+			strLength = (position + (inArray ? 4 : 3)) & 0xfffffc
+			for (; position < strLength; position++)
+				target[position++^3] = 0 // fill in remaining with zeros
 			return position
-		} else {
+/*		} else {
 			return position + target.utf8Write(key, position, 2000)
-		}
+		}*/
 	} else if (type === 'number') {
 		float64Array[0] = key
 		let lowInt = uint32Array[0]
 		let highInt = uint32Array[1]
 		let length
-		if (key < 0) {
-			target[position + 8] = (~(lowInt & 0xf)) << 4
-			targetView.setInt32(1, ~((lowInt >> 4) | (highInt << 28)))
-			targetView.setInt32(0, ~(highInt >> 4) | 0x8)
-			length = 9
-		} else if (lowInt & 0xf || position > 0) {
-			target[position + 8] = (lowInt & 0xf) << 4
-			length = 9
-		} else if (lowInt & 0xfff)
-			length = 8
-		else
-			length = 6
-		let targetView = target.dataView || (target.dataView = new DataView(target, 0, target.length))
-		// switching order to go to little endian
-		targetView.setInt32(1, (lowInt >> 4) | (highInt << 28))
-		targetView.setInt32(0, (highInt >> 4) | 0x10)
-		return position + length;
+		let targetUint32 = target.uint32Array || ()
+		let wordPosition = position >> 2
+		if (key >= 1) {
+			if (key > 1E150) {
+				targetUint32[wordPosition++] = 0x1e000000
+				position += 4
+				targetUint32[wordPosition] = highInt
+			} else
+				targetUint32[wordPosition] = highInt - 56
+			if (lowInt > 0 && !inArray) {
+				targetUint32[wordPosition + 1] = lowInt
+				return position + 8
+			} else
+				return position + 4
+		} else if (key >= 0) {
+			targetUint32[wordPosition++] = 0x6000000
+			targetUint32[wordPosition++] = highInt
+			targetUint32[wordPosition] = lowInt
+			return position + 12
+		} else { // negative
+			targetUint32[wordPosition] = highInt - 56
+			if (key < -1E150) {
+				targetUint32[wordPosition++] = 0x1e000000
+				position += 4
+				targetUint32[wordPosition] = ~highInt
+			} else
+				targetUint32[wordPosition] = ~highInt - 56
+			targetUint32[wordPosition + 1] = ~lowInt
+			return position + 8
+		}
 	} else if (type === 'object') {
 		if (key) {
 			if (key instanceof Array) {
@@ -98,174 +110,51 @@ exports.writeKey = function writeKey(key, target, position) {
 	}
 	return position
 }
-exports.toBufferKey = function(key) {
-	if (typeof key === 'string') {
-		if (key.charCodeAt(0) < 32) {
-			return Buffer.from('\u001B' + key) // escape, if there is a control character that starts it
-		}
-		return Buffer.from(key)
-	} else if (typeof key === 'number') {
-		let negative = key < 0
-		if (negative) {
-			key = -key // do our serialization on the positive form
-		}
-
-		if (key < MAX_48_BITS) {
-			const getByte = (max) => {
-				let byte = (key / max) >>> 0
-				key = key - byte * max
-				return byte
-			}
-			let bufferArray = [
-				negative ? 18 : 19,
-				key >= MAX_40_BITS ? getByte(MAX_40_BITS) : 0,
-				key >= MAX_32_BITS ? getByte(MAX_32_BITS) : 0,
-				key >>> 24,
-				key >>> 16 & 255,
-				key >>> 8 & 255,
-				key & 255,
-				0]
-			let index = 7
-			if (key - (key >>> 0)) {
-				// handle the decimal/mantissa
-				let asString = key.toString() // we operate with string representation to try to preserve non-binary decimal state
-				let exponentPosition = asString.indexOf('e')
-				let mantissa
-				if (exponentPosition > -1) {
-					let exponent = Number(asString.slice(exponentPosition + 2)) - 2
-					let i
-					for (i = 0; i < exponent; i += 2) {
-						bufferArray[index++] = 1 // zeros with continuance bit
-					}
-					asString = asString.slice(0, exponentPosition).replace(/\./, '')
-					if (i == exponent) {
-						asString = '0' + asString
-					}
+exports.readKey = function readKey(source, position, end) {
+	let wordPosition = position >> 2
+	let wordEnd = end >> 2
+	let string
+	let nullTerminated
+	let asInt = sourceUint32[wordPosition]
+	if (asInt > 0x1f000000) {
+	do {
+		let asInt = sourceUint32[wordPosition]
+		if (asInt & -0x808080)
+			return asUtf8()
+		let next
+		if (asInt & -0x8f000000 === 0) {
+			nullTerminated = true
+			if (asInt & 0xff0000 === 0) {
+				if (asInt & 0xff00 === 0) {
+					if (asInt & 0xff00 === 0)
+						next = String.fromCharCode(asInt & 0xff, (asInt >> 8) & 0xff)
+					else
+						next = ''
 				} else {
-					asString = asString.slice(asString.indexOf('.') + 1)
-				}
-				for (var i = 0, l = asString.length; i < l; i += 2) {
-					bufferArray[index++] = Number(asString[i] + (asString[i + 1] || 0)) * 2 + 1
-				}
-				bufferArray[index - 1]-- // remove the continuation bit on the last one
-			}
-			if (negative) {
-				// two's complement
-				for (let i = 1, l = bufferArray.length; i < l; i++) {
-					bufferArray[i] = bufferArray[i] ^ 255
+					next = String.fromCharCode(asInt & 0xff, (asInt >> 8) & 0xff)
 				}
 			}
-			return Buffer.from(bufferArray)
+			next = String.fromCharCode(asInt & 0xff, (asInt >> 8) & 0xff, (asInt >> 16) & 0xff)
+			wordPosition++
+			break
 		} else {
-			throw new Error('Unsupported number ' + key)
+			next = String.fromCharCode(asInt & 0xff, (asInt >> 8) & 0xff, (asInt >> 16) & 0xff, asInt >>> 24)			
 		}
-	} else if (typeof key === 'boolean') {
-		let buffer = Buffer.allocUnsafe(1)
-		buffer[0] = key ? 15 : 14 // SHIFT IN/OUT control characters
-		return buffer
-	} else if (key instanceof Metadata) {
-		let buffer = Buffer.allocUnsafe(1)
-		buffer[0] = key.code
-		return buffer
-	} else {
-		throw new Error('Can not serialize key ' + key)
+		string = string ? string + next : next
+	} while (++wordPosition < wordEnd)
+	if (nullTerminated && wordPosition < wordEnd) {
+		let next = readKey(source, wordPosition << 2, end)
+		if (next instanceof Array)
+			return [string, ...next]
+		return [string, next]
 	}
+}
+exports.toBufferKey = function(key) {
+	let buffer = Buffer.alloc(2048)
+	return buffer.slice(0, writeKey(key, buffer, 0, false))
 }
 
 function fromBufferKey(buffer, multipart) {
-	let value, values
-	do {
-		let consumed, controlByte = buffer[0]
-		switch (controlByte) {
-			case 18:
-				// negative number
-				for (let i = 1; i < 7; i++) {
-					buffer[i] = buffer[i] ^ 255
-				}
-				// fall through
-			case 19: // number
-				value = (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
-				if (buffer[3]) {
-					value += buffer[3] * MAX_24_BITS
-				}
-				if (buffer[2]) {
-					value += buffer[2] * MAX_32_BITS
-				}
-				if (buffer[1]) {
-					value += buffer[1] * MAX_40_BITS
-				}
-				consumed = 7
-				let negative = controlByte === 18
-				let decimal
-				do {
-					decimal = buffer[consumed++]
-					if (negative) {
-						decimal ^= 255
-					}
-					if (decimal)
-						value += (decimal >> 1) / 100**(consumed - 7)
-				} while (decimal & 1)
-				if (negative) {
-					value = -value
-				}
-				break
-			case 14: // boolean false
-				consumed = 1
-				value = false
-				break
-			case 15: // boolean true
-				consumed = 1
-				value = true
-				break
-			case 1: case 255:// metadata, return next byte as the code
-				consumed = 2
-				value = new Metadata(buffer[1])
-				break
-			default:
-				if (controlByte < 27) {
-					throw new Error('Unknown control byte ' + controlByte)
-				}
-				let strBuffer
-				if (multipart) {
-					consumed = buffer.indexOf(30)
-					if (consumed === -1) {
-						strBuffer = buffer
-						consumed = buffer.length
-					} else
-						strBuffer = buffer.slice(0, consumed)
-				} else
-					strBuffer = buffer
-				if (strBuffer[strBuffer.length - 1] == 27) {
-					// TODO: needs escaping here
-					value = strBuffer.toString()
-				} else {
-					value = strBuffer.toString()
-				}
-		}
-		if (multipart) {
-			if (!values) {
-				values = [value]
-			} else {
-				values.push(value)
-			}
-			if (buffer.length === consumed) {
-				return values // done, consumed all the values
-			}
-			if (buffer[consumed] !== 30)
-				throw new Error('Invalid separator byte')
-			buffer = buffer.slice(consumed + 1)
-		}
-	} while (multipart)
-	// single value mode
-	return value
-}
-
-// code can be one byte
-function Metadata(code) {
-	this.code = code
-}
-Metadata.prototype.toString = function() {
-	return 'Metadata: ' + this.code
+	return readKey(buffer, 0, 2048)
 }
 exports.fromBufferKey = fromBufferKey
-exports.Metadata = Metadata
