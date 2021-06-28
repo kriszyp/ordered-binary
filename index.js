@@ -1,33 +1,34 @@
 /*
 control character types:
 1 - metadata
-14 - true
-15 - false
-17 - number <= -2^48
-18 - -2^48 < number < 0
-19 - 0 <= number < 2^48
-20 - 2^48 <= number
-27 - used for escaping control bytes in strings
-30 - multipart separator
-> 31 normal string characters
+2 - symbols
+6 - false
+7 - true
+8- 16 - negative doubles
+16-24 positive doubles
+27 - String starts with a character 27 or less or is an empty string
+0 - multipart separator
+> 27 normal string characters
 */
-const MAX_24_BITS = 2**24
-const MAX_32_BITS = 2**32
-const MAX_40_BITS = 2**40
-const MAX_48_BITS = 2**48
+/*
+* Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
+*/
 
 const float64Array = new Float64Array(2)
-const uint32Array = new Uint32Array(float64Array.buffer, 0, 4)
+const int32Array = new Int32Array(float64Array.buffer, 0, 4)
 
 /*
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
-exports.writeKey = function writeKey(key, target, position) {
-	let type = typeof key
-	if (type === 'string') {
+function writeKey(key, target, position, inSequence) {
+	switch (typeof key) {
+  case 'string':
 		let strLength = key.length
+    let c1 = key.charCodeAt(0)
+    if (c1 < 28) // escape character
+      target[position++] = 27
 		if (strLength < 0x20) {
-			let i, c1, c2
+			let i, c2
 			for (i = 0; i < strLength; i++) {
 				c1 = key.charCodeAt(i)
 				if (c1 < 0x80) {
@@ -51,221 +52,226 @@ exports.writeKey = function writeKey(key, target, position) {
 					target[position++] = c1 & 0x3f | 0x80
 				}
 			}
-			return position
+      if (inSequence)
+        target[position++] = 0
 		} else {
-			return position + target.utf8Write(key, position, 2000)
+			position += target.utf8Write(key, position, 2000)
+      if (inSequence)
+        target[position++] = 0
 		}
-	} else if (type === 'number') {
+    break
+	case 'number':
 		float64Array[0] = key
-		let lowInt = uint32Array[0]
-		let highInt = uint32Array[1]
+		let lowInt = int32Array[0]
+		let highInt = int32Array[1]
 		let length
+    let targetView = target.dataView || (target.dataView = new DataView(target.buffer, target.byteOffset, ((target.byteLength + 3) >> 2) << 2))
 		if (key < 0) {
 			target[position + 8] = (~(lowInt & 0xf)) << 4
-			targetView.setInt32(1, ~((lowInt >> 4) | (highInt << 28)))
-			targetView.setInt32(0, ~(highInt >> 4) | 0x8)
-			length = 9
-		} else if (lowInt & 0xf || position > 0) {
+			targetView.setInt32(position + 4, ~((lowInt >>> 4) | (highInt << 28)))
+			targetView.setInt32(position + 0, (highInt ^ 0x7fffffff) >>> 4)
+      return position + 9
+		} else if (lowInt & 0xf || inSequence) {
 			target[position + 8] = (lowInt & 0xf) << 4
 			length = 9
 		} else if (lowInt & 0xfff)
 			length = 8
 		else
 			length = 6
-		let targetView = target.dataView || (target.dataView = new DataView(target, 0, target.length))
 		// switching order to go to little endian
-		targetView.setInt32(1, (lowInt >> 4) | (highInt << 28))
-		targetView.setInt32(0, (highInt >> 4) | 0x10)
+		targetView.setInt32(position + 4, (lowInt >>> 4) | (highInt << 28))
+		targetView.setInt32(position + 0, (highInt >>> 4) | 0x10000000)
 		return position + length;
-	} else if (type === 'object') {
+	case 'object':
 		if (key) {
 			if (key instanceof Array) {
 				for (let i = 0, l = key.length; i < l; i++) {
-					if (i > 0)
-						target[position++] = 0
-					position = writeKey(key[i], target, position)
+					position = writeKey(key[i], target, position, i < l - 1)
 				}
 			} else if (key instanceof Uint8Array) {
 				target.set(position, key)
 				return position + key.length
-			}
+			} else {
+        throw new Error('Unable to serialize object as a key')
+      }
 		} else // null
 			target[position++] = 5
-	} else if (type === 'boolean') {
+	case 'boolean':
 		target[position++] = key ? 7 : 6
-	} else if (type === 'bigint') {
+    break
+	case 'bigint':
 		return writeKey(Number(key), target, position)
-	}
+	case 'undefined': break
+    // undefined is interpreted as the absence of a key, signified by zero length
+  case 'symbol':
+    target[position++] = 2
+    return writeKey(key.description, target, position, inSequence)
+  default:
+    throw new Error('Can not serialize key of type ' + typeof key)
+  }
+
 	return position
 }
-exports.toBufferKey = function(key) {
-	if (typeof key === 'string') {
-		if (key.charCodeAt(0) < 32) {
-			return Buffer.from('\u001B' + key) // escape, if there is a control character that starts it
-		}
-		return Buffer.from(key)
-	} else if (typeof key === 'number') {
-		let negative = key < 0
-		if (negative) {
-			key = -key // do our serialization on the positive form
-		}
-
-		if (key < MAX_48_BITS) {
-			const getByte = (max) => {
-				let byte = (key / max) >>> 0
-				key = key - byte * max
-				return byte
-			}
-			let bufferArray = [
-				negative ? 18 : 19,
-				key >= MAX_40_BITS ? getByte(MAX_40_BITS) : 0,
-				key >= MAX_32_BITS ? getByte(MAX_32_BITS) : 0,
-				key >>> 24,
-				key >>> 16 & 255,
-				key >>> 8 & 255,
-				key & 255,
-				0]
-			let index = 7
-			if (key - (key >>> 0)) {
-				// handle the decimal/mantissa
-				let asString = key.toString() // we operate with string representation to try to preserve non-binary decimal state
-				let exponentPosition = asString.indexOf('e')
-				let mantissa
-				if (exponentPosition > -1) {
-					let exponent = Number(asString.slice(exponentPosition + 2)) - 2
-					let i
-					for (i = 0; i < exponent; i += 2) {
-						bufferArray[index++] = 1 // zeros with continuance bit
-					}
-					asString = asString.slice(0, exponentPosition).replace(/\./, '')
-					if (i == exponent) {
-						asString = '0' + asString
-					}
-				} else {
-					asString = asString.slice(asString.indexOf('.') + 1)
-				}
-				for (var i = 0, l = asString.length; i < l; i += 2) {
-					bufferArray[index++] = Number(asString[i] + (asString[i + 1] || 0)) * 2 + 1
-				}
-				bufferArray[index - 1]-- // remove the continuation bit on the last one
-			}
-			if (negative) {
-				// two's complement
-				for (let i = 1, l = bufferArray.length; i < l; i++) {
-					bufferArray[i] = bufferArray[i] ^ 255
-				}
-			}
-			return Buffer.from(bufferArray)
-		} else {
-			throw new Error('Unsupported number ' + key)
-		}
-	} else if (typeof key === 'boolean') {
-		let buffer = Buffer.allocUnsafe(1)
-		buffer[0] = key ? 15 : 14 // SHIFT IN/OUT control characters
-		return buffer
-	} else if (key instanceof Metadata) {
-		let buffer = Buffer.allocUnsafe(1)
-		buffer[0] = key.code
-		return buffer
-	} else {
-		throw new Error('Can not serialize key ' + key)
-	}
+let position
+function readKey(buffer, start, end) {
+  position = start
+  let controlByte = buffer[position]
+  let value
+  if (controlByte < 24) {
+    if (controlByte < 8) {
+      position++
+      if (controlByte == 6) {
+        value = false
+      } else if (controlByte == 7) {
+        value = true
+      } else if (controlByte == 0) {
+        value = null
+      } else if (controlByte == 2) {
+        value = Symbol.for(readKey(buffer, position, end))
+      } else
+        return buffer
+    } else {
+      let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+      let highInt = dataView.getInt32(position) << 4
+      let size = end - position
+      let lowInt
+      if (size > 4) {
+        lowInt = dataView.getInt32(position + 4)
+        highInt |= lowInt >>> 28
+        if (size < 6) {
+          lowInt &= -0x7fff0000
+        }
+        lowInt = lowInt << 4
+        if (size > 8) {
+          lowInt = lowInt | buffer[position + 8] >> 4
+        }
+      } else
+        lowInt = 0
+      if (controlByte < 16) {
+        // negative gets negated
+        highInt = highInt ^ 0x7fffffff
+        lowInt = ~lowInt
+      }
+      int32Array[1] = highInt
+      int32Array[0] = lowInt
+      value = float64Array[0]
+      position += 9
+    }
+  } else {
+    if (controlByte == 27) {
+      position++
+    }
+    value = readString(buffer)
+    /*let strStart = position
+    let strEnd = end
+    for (; position < end; position++) {
+      if (buffer[position] == 0) {
+        break
+      }
+    }
+    value = buffer.toString('utf8', strStart, position++)*/
+  }
+  if (position < end) {
+    if (buffer[position] === 0)
+      position++
+    let nextValue = readKey(buffer, position, end)
+    if (nextValue instanceof Array) {
+      nextValue.unshift(value)
+      return nextValue
+    } else
+      return [value, nextValue]
+  }
+  return value
 }
+exports.writeKey = writeKey
+exports.readKey = readKey
+exports.toBufferKey = (key) => {
+  let buffer = Buffer.alloc(2048)
+  return buffer.slice(0, writeKey(key, buffer, 0) + 1)
+}
+exports.fromBufferKey = (sourceBuffer) => {
+  return readKey(sourceBuffer, 0, sourceBuffer.length - 1)
+}
+const fromCharCode = String.fromCharCode
+function readNullTermString(buffer, position) {
+  let a = buffer[position++]
+  if (a === 0)
+    return fromCharCode()
+  else if (a >= 0x80)
+    a = finishUtf8(position)
 
-function fromBufferKey(buffer, multipart) {
-	let value, values
-	do {
-		let consumed, controlByte = buffer[0]
-		switch (controlByte) {
-			case 18:
-				// negative number
-				for (let i = 1; i < 7; i++) {
-					buffer[i] = buffer[i] ^ 255
-				}
-				// fall through
-			case 19: // number
-				value = (buffer[4] << 16) + (buffer[5] << 8) + (buffer[6])
-				if (buffer[3]) {
-					value += buffer[3] * MAX_24_BITS
-				}
-				if (buffer[2]) {
-					value += buffer[2] * MAX_32_BITS
-				}
-				if (buffer[1]) {
-					value += buffer[1] * MAX_40_BITS
-				}
-				consumed = 7
-				let negative = controlByte === 18
-				let decimal
-				do {
-					decimal = buffer[consumed++]
-					if (negative) {
-						decimal ^= 255
-					}
-					if (decimal)
-						value += (decimal >> 1) / 100**(consumed - 7)
-				} while (decimal & 1)
-				if (negative) {
-					value = -value
-				}
-				break
-			case 14: // boolean false
-				consumed = 1
-				value = false
-				break
-			case 15: // boolean true
-				consumed = 1
-				value = true
-				break
-			case 1: case 255:// metadata, return next byte as the code
-				consumed = 2
-				value = new Metadata(buffer[1])
-				break
-			default:
-				if (controlByte < 27) {
-					throw new Error('Unknown control byte ' + controlByte)
-				}
-				let strBuffer
-				if (multipart) {
-					consumed = buffer.indexOf(30)
-					if (consumed === -1) {
-						strBuffer = buffer
-						consumed = buffer.length
-					} else
-						strBuffer = buffer.slice(0, consumed)
-				} else
-					strBuffer = buffer
-				if (strBuffer[strBuffer.length - 1] == 27) {
-					// TODO: needs escaping here
-					value = strBuffer.toString()
-				} else {
-					value = strBuffer.toString()
-				}
-		}
-		if (multipart) {
-			if (!values) {
-				values = [value]
-			} else {
-				values.push(value)
-			}
-			if (buffer.length === consumed) {
-				return values // done, consumed all the values
-			}
-			if (buffer[consumed] !== 30)
-				throw new Error('Invalid separator byte')
-			buffer = buffer.slice(consumed + 1)
-		}
-	} while (multipart)
-	// single value mode
-	return value
+}
+function makeStringBuilder() {
+  let stringBuildCode = '(source) => {'
+  let previous = []
+  for (let i = 0; i < 0x20; i++) {
+    v = fromCharCode((i & 0xf) + 97) + fromCharCode((i >> 4) + 97)
+    stringBuildCode += `
+  let ${v} = source[position++]
+  if (${v} === 0)
+    return fromCharCode(${previous})
+  else if (${v} >= 0x80)
+    ${v} = finishUtf8(${v}, source)
+`
+    previous.push(v)
+  }
+  stringBuildCode += `return fromCharCode(${previous}) + readString(source)}`
+  return stringBuildCode
 }
 
-// code can be one byte
-function Metadata(code) {
-	this.code = code
+let pendingSurrogate
+function finishUtf8(byte1, src) {
+    if ((byte1 & 0xe0) === 0xc0) {
+      // 2 bytes
+      const byte2 = src[position++] & 0x3f
+      return ((byte1 & 0x1f) << 6) | byte2
+    } else if ((byte1 & 0xf0) === 0xe0) {
+      // 3 bytes
+      const byte2 = src[position++] & 0x3f
+      const byte3 = src[position++] & 0x3f
+      return ((byte1 & 0x1f) << 12) | (byte2 << 6) | byte3
+    } else if ((byte1 & 0xf8) === 0xf0) {
+      // 4 bytes
+      if (pendingSurrogate) {
+        byte1 = pendingSurrogate
+        pendingSurrogate = null
+        position += 3
+        return byte1
+      }
+      const byte2 = src[position++] & 0x3f
+      const byte3 = src[position++] & 0x3f
+      const byte4 = src[position++] & 0x3f
+      let unit = ((byte1 & 0x07) << 0x12) | (byte2 << 0x0c) | (byte3 << 0x06) | byte4
+      if (unit > 0xffff) {
+        unit -= 0x10000
+        unit = 0xdc00 | (unit & 0x3ff)
+        pendingSurrogate = ((unit >>> 10) & 0x3ff) | 0xd800
+        position -= 4 // reset so we can return the next part of the surrogate pair
+      }
+      return unit
+    } else {
+      return byte1
+    }
 }
-Metadata.prototype.toString = function() {
-	return 'Metadata: ' + this.code
+
+function swap64Bit(buffer, start, end) {
+  let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+  let end64Bit = end & 0xffffff8
+  for (;start < end64Bit; start += 8) {
+    dataView.setBigUint64(start, dataView.getBigUint64(start), true)
+  }
+  dataView.setBigUint64(start, dataView.getBigUint64(start) >> ((8n - BigInt(end - start)) << 3n), true)
 }
-exports.fromBufferKey = fromBufferKey
-exports.Metadata = Metadata
+exports.swap64Bit = swap64Bit
+
+function swap32Bit(buffer, start, end) {
+  let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+  let end64Bit = end & 0xffffffc
+  for (;start < end64Bit; start += 4) {
+    dataView.setUint32(start, dataView.getUint32(start), true)
+  }
+  dataView.setUint32(start, dataView.getUint32(start) >>> ((4 - (end - start)) << 3), true)
+}
+exports.swap32Bit = swap32Bit
+
+const readString = eval(makeStringBuilder())

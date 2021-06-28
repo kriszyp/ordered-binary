@@ -1,6 +1,6 @@
 const { assert } = require('chai')
 
-const { toBufferKey, fromBufferKey } = require('../index')
+const { toBufferKey, fromBufferKey, readKey, writeKey, swap64Bit, swap32Bit } = require('../index')
 
 function assertBufferComparison(lesser, greater) {
   for (let i = 0; i < lesser.length; i++) {
@@ -12,6 +12,7 @@ function assertBufferComparison(lesser, greater) {
     }
   }
 }
+//var inspector = require('inspector'); inspector.open(9330, null, true); debugger
 
 suite('key buffers', () => {
 
@@ -46,6 +47,8 @@ suite('key buffers', () => {
     assertBufferComparison(toBufferKey('4'), toBufferKey('5'))
     assertBufferComparison(toBufferKey('and'), toBufferKey('bad'))
     assertBufferComparison(toBufferKey('hello'), toBufferKey('hello2'))
+    let buffer = Buffer.alloc(1024)
+    let end = writeKey(['this is a test', 5.25], buffer, 0)
   })
   test('boolean equivalence', () => {
     assert.strictEqual(fromBufferKey(toBufferKey(true)), true)
@@ -53,20 +56,15 @@ suite('key buffers', () => {
   })
 
   test('multipart equivalence', () => {
-    assert.deepEqual(fromBufferKey(
-      Buffer.concat([toBufferKey(4), Buffer.from([30]), toBufferKey(5)]), true),
+    assert.deepEqual(fromBufferKey(toBufferKey([4, 5])),
       [4, 5])
-    assert.deepEqual(fromBufferKey(
-      Buffer.concat([toBufferKey('hello'), Buffer.from([30]), toBufferKey(5.25)]), true),
+    assert.deepEqual(fromBufferKey(toBufferKey(['hello', 5.25])),
       ['hello', 5.25])
-    assert.deepEqual(fromBufferKey(
-      Buffer.concat([toBufferKey(true), Buffer.from([30]), toBufferKey(1503579323825)]), true),
+    assert.deepEqual(fromBufferKey(toBufferKey([true, 1503579323825])),
       [true, 1503579323825])
-    assert.deepEqual(fromBufferKey(
-      Buffer.concat([toBufferKey(-0.2525), Buffer.from([30]), toBufferKey('second')]), true),
+    assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, 'second'])),
       [-0.2525, 'second'])
-    assert.deepEqual(fromBufferKey(
-      Buffer.concat([toBufferKey(-0.2525), Buffer.from([30]), toBufferKey('2nd'), Buffer.from([30]), toBufferKey('3rd')]), true),
+    assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, '2nd', '3rd'])),
       [-0.2525, '2nd', '3rd'])
   })
 
@@ -83,6 +81,56 @@ suite('key buffers', () => {
     assertBufferComparison(
       Buffer.concat([toBufferKey(4), Buffer.from([30]), toBufferKey('and')]),
       Buffer.concat([toBufferKey(4), Buffer.from([30]), toBufferKey('cat')]))
+  })
+  test('performance', () => {
+    let buffer = Buffer.alloc(1024)
+    let start = process.hrtime.bigint()
+    let end, value
+    for (let i = 0; i < 1000000; i++) {
+      end = writeKey('this is a test of a longer string to read and write', buffer, 0)
+    }
+    console.log('writeKey string time', nextTime(), end)
+    for (let i = 0; i < 1000000; i++) {
+      value = readKey(buffer, 0, end)
+    }
+    console.log('readKey string time', nextTime(), value)
+
+    for (let i = 0; i < 1000000; i++) {
+      end = writeKey(33456, buffer, 0)
+    }
+    console.log('writeKey number time', nextTime(), end)
+
+    for (let i = 0; i < 1000000; i++) {
+      value = readKey(buffer, 0, end)
+    }
+    console.log('readKey number time', nextTime(), value)
+
+    for (let i = 0; i < 1000000; i++) {
+      end = writeKey(['hello', 33456], buffer, 0)
+    }
+    console.log('writeKey array time', nextTime(), end, buffer.slice(0, end))
+
+    for (let i = 0; i < 1000000; i++) {
+      value = readKey(buffer, 0, end)
+    }
+    console.log('readKey array time', nextTime(), value)
+
+    for (let i = 0; i < 1000000; i++) {
+      swap64Bit(buffer, 0, end)
+    }
+    console.log('swap64Bit array time', nextTime(), end)
+
+    for (let i = 0; i < 1000000; i++) {
+      swap32Bit(buffer, 0, end)
+    }
+    console.log('swap32Bit array time', nextTime(), end)
+
+    function nextTime() {
+      let ns = process.hrtime.bigint()
+      let elapsed = ns - start
+      start = ns
+      return Number(elapsed) / 1000000 + 'ns'
+    }
   })
 
 })

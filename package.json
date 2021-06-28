@@ -9,7 +9,7 @@
     "url": "http://github.com/kriszyp/ordered-binary"
   },
   "scripts": {
-    "test": "./node_modules/.bin/mocha tests -u tdd"
+    "test": "mocha tests -u tdd"
   },
   "main": "./index.js",
   "typings": "./index.d.ts",
