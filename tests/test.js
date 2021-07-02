@@ -1,6 +1,6 @@
 const { assert } = require('chai')
 
-const { toBufferKey, fromBufferKey, readKey, writeKey, swap64Bit, swap32Bit } = require('../index')
+const { toBufferKey, fromBufferKey, readKey, writeKey, writeKeyV2, swap64Bit, swap32Bit } = require('../index')
 
 function assertBufferComparison(lesser, greater) {
   for (let i = 0; i < lesser.length; i++) {
@@ -86,41 +86,46 @@ suite('key buffers', () => {
     let buffer = Buffer.alloc(1024)
     let start = process.hrtime.bigint()
     let end, value
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       end = writeKey('this is a test of a longer string to read and write', buffer, 0)
     }
     console.log('writeKey string time', nextTime(), end)
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       value = readKey(buffer, 0, end)
     }
     console.log('readKey string time', nextTime(), value)
 
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       end = writeKey(33456, buffer, 0)
     }
     console.log('writeKey number time', nextTime(), end)
 
-    for (let i = 0; i < 1000000; i++) {
-      value = readKey(buffer, 0, end)
+    for (let i = 0; i < 10000000; i++) {
+      value = readKey(buffer, 2, end)
     }
     console.log('readKey number time', nextTime(), value)
 
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       end = writeKey(['hello', 33456], buffer, 0)
     }
     console.log('writeKey array time', nextTime(), end, buffer.slice(0, end))
 
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       value = readKey(buffer, 0, end)
     }
     console.log('readKey array time', nextTime(), value)
 
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
+      end = writeKeyV2(33456, buffer, 2)
+    }
+    console.log('writeKeyV2 number time', nextTime(), end)
+
+    for (let i = 0; i < 10000000; i++) {
       swap64Bit(buffer, 0, end)
     }
     console.log('swap64Bit array time', nextTime(), end)
 
-    for (let i = 0; i < 1000000; i++) {
+    for (let i = 0; i < 10000000; i++) {
       swap32Bit(buffer, 0, end)
     }
     console.log('swap32Bit array time', nextTime(), end)
@@ -129,7 +134,7 @@ suite('key buffers', () => {
       let ns = process.hrtime.bigint()
       let elapsed = ns - start
       start = ns
-      return Number(elapsed) / 1000000 + 'ns'
+      return Number(elapsed) / 10000000 + 'ns'
     }
   })
 
