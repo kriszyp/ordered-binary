@@ -103,7 +103,7 @@ function writeKey(key, target, position, inSequence) {
 				throw new Error('Unable to serialize object as a key')
 			}
 		} else // null
-			target[position++] = 5
+			target[position++] = 0
 			break
 	case 'boolean':
 		target[position++] = key ? 7 : 6
@@ -322,7 +322,7 @@ function readKey(buffer, start, end) {
 		} else if (controlByte == 0) {
 			value = null
 		} else if (controlByte == 2) {
-			value = Symbol.for(readKey(buffer, position, end))
+			value = Symbol.for(readString(buffer))
 		} else
 			return buffer
 	} else {
