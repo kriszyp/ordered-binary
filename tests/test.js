@@ -1,6 +1,6 @@
 const { assert } = require('chai')
 
-const { toBufferKey, fromBufferKey, readKey, writeKey, writeKeyV2, swap64Bit, swap32Bit } = require('../index')
+const { toBufferKey, fromBufferKey, readKey, writeKey } = require('../index')
 
 function assertBufferComparison(lesser, greater) {
   for (let i = 0; i < lesser.length; i++) {
@@ -115,21 +115,6 @@ suite('key buffers', () => {
       value = readKey(buffer, 0, end)
     }
     console.log('readKey array time', nextTime(), value)
-
-    for (let i = 0; i < 1000000; i++) {
-      end = writeKeyV2(33456, buffer, 2)
-    }
-    console.log('writeKeyV2 number time', nextTime(), end)
-
-    for (let i = 0; i < 1000000; i++) {
-      swap64Bit(buffer, 0, end)
-    }
-    console.log('swap64Bit array time', nextTime(), end)
-
-    for (let i = 0; i < 1000000; i++) {
-      swap32Bit(buffer, 0, end)
-    }
-    console.log('swap32Bit array time', nextTime(), end)
 
     function nextTime() {
       let ns = process.hrtime.bigint()
