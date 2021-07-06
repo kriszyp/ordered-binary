@@ -18,10 +18,14 @@ const float64Array = new Float64Array(2)
 const int32Array = new Int32Array(float64Array.buffer, 0, 4)
 const uint8Array6 = new Uint8Array(float64Array.buffer, 2, 6)
 const uint8Array8 = new Uint8Array(float64Array.buffer, 0, 8)
+let nullTerminate = false
 /*
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
 function writeKey(key, target, position, inSequence) {
+	let targetView = target.dataView
+	if (!targetView)
+		targetView  = target.dataView = new DataView(target.buffer, target.byteOffset, ((target.byteLength + 3) >> 2) << 2)
 	switch (typeof key) {
 	case 'string':
 		let strLength = key.length
@@ -56,32 +60,31 @@ function writeKey(key, target, position, inSequence) {
 		} else {
 			position += target.utf8Write(key, position, 2000)
 		}
-	break
+		break
 	case 'number':
 		float64Array[0] = key
 		let lowInt = int32Array[0]
 		let highInt = int32Array[1]
 		let length
-		let targetView = target.dataView
-		if (!targetView)
-			targetView  = target.dataView = new DataView(target.buffer, target.byteOffset, ((target.byteLength + 3) >> 2) << 2)
 		if (key < 0) {
-			target[position + 8] = (~(lowInt & 0xf)) << 4
 			targetView.setInt32(position + 4, ~((lowInt >>> 4) | (highInt << 28)))
 			targetView.setInt32(position + 0, (highInt ^ 0x7fffffff) >>> 4)
+			targetView.setInt32(position + 8, (~(lowInt & 0xf)) << 4, true) // just always do the null termination here
 			return position + 9
 		} else if ((lowInt & 0xf) || inSequence) {
 			target[position + 8] = (lowInt & 0xf) << 4
 			length = 9
-		} else if (lowInt & 0xfff)
+		} else if (lowInt & 0xfffff)
 			length = 8
-		else if (lowInt)
+		else if (lowInt || (highInt & 0xf))
 			length = 6
 		else
 			length = 4
 		// switching order to go to little endian
-		targetView.setInt32(position + 4, (lowInt >>> 4) | (highInt << 28))
 		targetView.setInt32(position + 0, (highInt >>> 4) | 0x10000000)
+		targetView.setInt32(position + 4, (lowInt >>> 4) | (highInt << 28))
+		if (nullTerminate && !inSequence)
+			targetView.setInt32(position + 8, 0)
 		return position + length;
 	case 'object':
 		if (key) {
@@ -91,29 +94,33 @@ function writeKey(key, target, position, inSequence) {
 						target[position++] = 0
 					position = writeKey(key[i], target, position, true)
 				}
-				return position
+				break
 			} else if (key instanceof Uint8Array) {
 				target.set(key, position)
-				return position + key.length
+				position += key.length
+				break
 			} else {
 				throw new Error('Unable to serialize object as a key')
 			}
 		} else // null
 			target[position++] = 5
+			break
 	case 'boolean':
 		target[position++] = key ? 7 : 6
 		break
 	case 'bigint':
-		return writeKey(Number(key), target, position)
+		position = writeKey(Number(key), target, position)
 	case 'undefined': break
 	// undefined is interpreted as the absence of a key, signified by zero length
 	case 'symbol':
 		target[position++] = 2
-		return writeKey(key.description, target, position, inSequence)
+		position = writeKey(key.description, target, position, inSequence)
+		break
 	default:
 	throw new Error('Can not serialize key of type ' + typeof key)
 	}
-
+	if (nullTerminate && !inSequence)
+		targetView.setUint32(position, 0)
 	return position
 }
 function writeKeyV2(key, target, position, inSequence) {
@@ -161,16 +168,34 @@ function writeKeyV2(key, target, position, inSequence) {
 		if (!targetView)
 			targetView  = target.dataView = new DataView(target.buffer, target.byteOffset, ((target.byteLength + 3) >> 2) << 2)
 		float64Array[0] = key
-		uint8Array8[7] -= 50 // use 13-21?
 		let lowInt = int32Array[0]
 		let highInt = int32Array[1]
-		if (key < 1) {
-			target[position + 8] = (~(lowInt & 0xf)) << 4
-			targetView.setInt32(position + 4, ~((lowInt >>> 4) | (highInt << 28)))
-			targetView.setInt32(position + 0, (highInt ^ 0x7fffffff) >>> 4)
-			return position + 9
-		} else if (key < 0x100000000000000000000000000000000) {
-			targetView.setInt32(position, highInt)
+		if (key < 1 && key < 0.001) {
+			if (key >= 0) { // small positive numbers
+				target[position++] = 14
+				targetView.setFloat64(position, key)
+				return position + 8
+			} else if (key >= 0.001) {
+				// small negative numbers
+				target[position++] = 13
+				targetView.setInt32(position, ~highInt)
+				targetView.setInt32(position + 4, ~lowInt)
+				return position + 8
+			} else if (key > -0x10000000000000000) { // medium negative numbers
+				uint8Array8[7] -= 48 // use 8-12
+				target[position++] = 13
+				targetView.setInt32(position, ~(0x30000000 + highInt))
+				targetView.setInt32(position + 4, ~lowInt)
+				return position + 8
+			} else { // large negative numbers
+				target[position++] = 7
+				targetView.setInt32(position, ~highInt)
+				targetView.setInt32(position + 4, ~lowInt)
+				return position + 8
+			}
+		} else if (key < 0x7f000000 || key < 0x1f000000000000000000000000000000000000000) {
+			// medium positive numbers
+			targetView.setInt32(position, highInt - 0x30000000) // use 15-25 as the first byte
 			if ((lowInt & 0xffff) == 0) {
 				if (lowInt == 0)
 					return position + 4
@@ -179,6 +204,11 @@ function writeKeyV2(key, target, position, inSequence) {
 			}
 			targetView.setInt32(position + 4, lowInt)
 			return position + 8
+		} else { // large positive numbers
+			target[position++] = 26
+			targetView.setFloat64(position, key)
+			return position + 8
+
 		}
 /*
 	case 'number':
@@ -312,7 +342,7 @@ function readKey(buffer, start, end) {
 			}
 		} else
 			lowInt = 0
-			if (controlByte < 16) {
+		if (controlByte < 16) {
 			// negative gets negated
 			highInt = highInt ^ 0x7fffffff
 			lowInt = ~lowInt
@@ -337,14 +367,14 @@ function readKey(buffer, start, end) {
 	value = buffer.toString('utf8', strStart, position++)*/
 	}
 	if (position < end) {
-	if (buffer[position] === 0)
-		position++
-	let nextValue = readKey(buffer, position, end)
-	if (nextValue instanceof Array) {
-		nextValue.unshift(value)
-		return nextValue
-	} else
-		return [value, nextValue]
+		if (buffer[position] === 0)
+			position++
+		let nextValue = readKey(buffer, position, end)
+		if (nextValue instanceof Array) {
+			nextValue.unshift(value)
+			return nextValue
+		} else
+			return [value, nextValue]
 	}
 	return value
 }
@@ -422,22 +452,25 @@ function finishUtf8(byte1, src) {
 
 function swap64Bit(buffer, start, end) {
 	let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
-	let end64Bit = end & 0xffffff8
-	for (;start < end64Bit; start += 8) {
-	dataView.setBigUint64(start, dataView.getBigUint64(start), true)
+	let highByte = 0x2ccd
+	let lowByte = 0
+	for (let i = 0; i < 100; i++) {
+		lowByte += 4
+		dataView.setUint32(start, lowByte, true)
+		dataView.setUint32(start+4, highByte, true)
 	}
-	dataView.setBigUint64(start, dataView.getBigUint64(start) >> ((8n - BigInt(end - start)) << 3n), true)
 }
 exports.swap64Bit = swap64Bit
 
 function swap32Bit(buffer, start, end) {
 	let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
-	let end64Bit = end & 0xffffffc
-	for (;start < end64Bit; start += 4) {
-	dataView.setUint32(start, dataView.getUint32(start), true)
+	let pointer = 0x2ccd00000000;
+	for (let i = 0; i < 100; i++) {
+		pointer += 4;
+		dataView.setFloat64(start, pointer, true)
 	}
-	dataView.setUint32(start, dataView.getUint32(start) >>> ((4 - (end - start)) << 3), true)
 }
 exports.swap32Bit = swap32Bit
+exports.enableNullTermination = () => nullTerminate = true
 
 const readString = eval(makeStringBuilder())
