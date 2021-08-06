@@ -69,10 +69,9 @@ function writeKey(key, target, position, inSequence) {
 		if (key < 0) {
 			targetView.setInt32(position + 4, ~((lowInt >>> 4) | (highInt << 28)))
 			targetView.setInt32(position + 0, (highInt ^ 0x7fffffff) >>> 4)
-			targetView.setInt32(position + 8, (~(lowInt & 0xf)) << 4, true) // just always do the null termination here
+			targetView.setInt32(position + 8, ((lowInt & 0xf) ^ 0xf) << 4, true) // just always do the null termination here
 			return position + 9
 		} else if ((lowInt & 0xf) || inSequence) {
-			target[position + 8] = (lowInt & 0xf) << 4
 			length = 9
 		} else if (lowInt & 0xfffff)
 			length = 8
@@ -83,8 +82,8 @@ function writeKey(key, target, position, inSequence) {
 		// switching order to go to little endian
 		targetView.setInt32(position + 0, (highInt >>> 4) | 0x10000000)
 		targetView.setInt32(position + 4, (lowInt >>> 4) | (highInt << 28))
-		if (nullTerminate && !inSequence)
-			targetView.setInt32(position + 8, 0)
+		// if (length == 9 || nullTerminate)
+		targetView.setInt32(position + 8, (lowInt & 0xf) << 4, true)
 		return position + length;
 	case 'object':
 		if (key) {
