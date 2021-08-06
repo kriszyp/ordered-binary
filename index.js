@@ -105,18 +105,18 @@ function writeKey(key, target, position, inSequence) {
 			target[position++] = 0
 			break
 	case 'boolean':
-		target[position++] = key ? 7 : 6
-		break
+		targetView.setUint32(position++, key ? 7 : 6, true)
+		return position
 	case 'bigint':
-		position = writeKey(Number(key), target, position)
-	case 'undefined': break
+		return writeKey(Number(key), target, position, inSequence)
+	case 'undefined':
+		return position
 	// undefined is interpreted as the absence of a key, signified by zero length
 	case 'symbol':
 		target[position++] = 2
-		position = writeKey(key.description, target, position, inSequence)
-		break
+		return writeKey(key.description, target, position, inSequence)
 	default:
-	throw new Error('Can not serialize key of type ' + typeof key)
+		throw new Error('Can not serialize key of type ' + typeof key)
 	}
 	if (nullTerminate && !inSequence)
 		targetView.setUint32(position, 0)
@@ -124,7 +124,7 @@ function writeKey(key, target, position, inSequence) {
 }
 
 let position
-function readKey(buffer, start, end) {
+function readKey(buffer, start, end, inSequence) {
 	buffer[end] = 0 // make sure it is null terminated
 	position = start
 	let controlByte = buffer[position]
@@ -183,15 +183,18 @@ function readKey(buffer, start, end) {
 	}
 	value = buffer.toString('utf8', strStart, position++)*/
 	}
-	if (position < end) {
+	while (position < end) {
 		if (buffer[position] === 0)
 			position++
-		let nextValue = readKey(buffer, position, end)
-		if (nextValue instanceof Array) {
-			nextValue.unshift(value)
-			return nextValue
+		if (inSequence) {
+			exports.position = position
+			return value
+		}
+		let nextValue = readKey(buffer, position, end, true)
+		if (value instanceof Array) {
+			value.push(nextValue)
 		} else
-			return [value, nextValue]
+			value = [ value, nextValue ]
 	}
 	return value
 }
@@ -199,20 +202,12 @@ exports.writeKey = writeKey
 exports.readKey = readKey
 exports.toBufferKey = (key) => {
 	let buffer = Buffer.alloc(2048)
-	return buffer.slice(0, writeKey(key, buffer, 0) + 1)
+	return buffer.slice(0, writeKey(key, buffer, 0, 2048) + 1)
 }
 exports.fromBufferKey = (sourceBuffer) => {
 	return readKey(sourceBuffer, 0, sourceBuffer.length - 1)
 }
 const fromCharCode = String.fromCharCode
-function readNullTermString(buffer, position) {
-	let a = buffer[position++]
-	if (a === 0)
-	return fromCharCode()
-	else if (a >= 0x80)
-	a = finishUtf8(position)
-
-}
 function makeStringBuilder() {
 	let stringBuildCode = '(source) => {'
 	let previous = []
@@ -269,3 +264,54 @@ function finishUtf8(byte1, src) {
 exports.enableNullTermination = () => nullTerminate = true
 
 const readString = eval(makeStringBuilder())
+
+function compareKeys(a, b) {
+	// compare with type consistency that matches ordered-binary
+	if (typeof a == 'object') {
+		if (!a) {
+			return b == null ? 0 : -1
+		}
+		if (a.compare) {
+			if (b == null) {
+				return 1
+			} else if (b.compare) {
+				return a.compare(b)
+			} else {
+				return -1
+			}
+		}
+		let arrayComparison
+		if (b instanceof Array) {
+			let i = 0
+			while((arrayComparison = compareKeys(a[i], b[i])) == 0 && i <= a.length)  {
+				i++
+			}
+			return arrayComparison
+		}
+		arrayComparison = compareKeys(a[0], b)
+		if (arrayComparison == 0 && a.length > 1)
+			return 1
+		return arrayComparison
+	} else if (typeof a == typeof b) {
+		if (typeof a === 'symbol') {
+			a = Symbol.keyFor(a)
+			b = Symbol.keyFor(b)
+		}
+		return a < b ? -1 : a === b ? 0 : 1
+	}
+	else if (typeof b == 'object') {
+		if (b instanceof Array)
+			return -compareKeys(b, a)
+		return 1
+	} else {
+		return typeOrder[typeof a] < typeOrder[typeof b] ? -1 : 1
+	}
+}
+exports.compareKeys = compareKeys
+const typeOrder = {
+	symbol: 0,
+	undefined: 1,
+	boolean: 2,
+	number: 3,
+	string: 4
+}
