@@ -141,7 +141,7 @@ function readKey(buffer, start, end, inSequence) {
 		} else if (controlByte == 2) {
 			value = Symbol.for(readString(buffer))
 		} else
-			return buffer
+			return Uint8Array.prototype.slice.call(buffer, start, end)
 	} else {
 		let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
 		let highInt = dataView.getInt32(position) << 4
