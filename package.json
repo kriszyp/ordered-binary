@@ -1,7 +1,7 @@
 {
   "name": "ordered-binary",
   "author": "Kris Zyp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Conversion of JavaScript primitives to and from Buffer with binary order matching natural primitive order",
   "license": "MIT",
   "repository": {
@@ -11,13 +11,17 @@
   "scripts": {
     "test": "mocha tests -u tdd"
   },
-  "main": "./index.js",
+  "type": "module",
+  "main": "index.js",
+  "module": "main.mjs",
   "typings": "./index.d.ts",
-  "dependencies": {},
+  "dependencies": {
+    "esm": "^3.2.25"
+  },
   "optionalDependencies": {},
   "devDependencies": {
-    "mocha": "^4",
+    "@types/node": "latest",
     "chai": "^4",
-    "@types/node": "latest"
+    "mocha": "^4"
   }
 }
