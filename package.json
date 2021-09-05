@@ -12,7 +12,7 @@
     "test": "mocha tests -u tdd"
   },
   "type": "module",
-  "main": "index.js",
+  "main": "index.cjs",
   "module": "main.mjs",
   "typings": "./index.d.ts",
   "dependencies": {
