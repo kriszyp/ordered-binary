@@ -1,6 +1,6 @@
-const { assert } = require('chai')
+import { assert } from 'chai'
 
-const { toBufferKey, fromBufferKey, readKey, writeKey } = require('../index')
+import { toBufferKey, fromBufferKey, readKey, writeKey } from '../index.js'
 
 function assertBufferComparison(lesser, greater) {
   for (let i = 0; i < lesser.length; i++) {
