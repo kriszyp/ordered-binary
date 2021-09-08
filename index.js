@@ -214,15 +214,17 @@ function makeStringBuilder() {
 	let stringBuildCode = '(source) => {'
 	let previous = []
 	for (let i = 0; i < 0x30; i++) {
-	let v = fromCharCode((i & 0xf) + 97) + fromCharCode((i >> 4) + 97)
-	stringBuildCode += `
-	let ${v} = source[position++]
-	if (${v} === 0)
-	return fromCharCode(${previous})
-	else if (${v} >= 0x80)
-	${v} = finishUtf8(${v}, source)
-`
-	previous.push(v)
+		let v = fromCharCode((i & 0xf) + 97) + fromCharCode((i >> 4) + 97)
+		stringBuildCode += `
+		let ${v} = source[position++]
+		if (${v} === 0)
+		return fromCharCode(${previous})
+		else if (${v} >= 0x80)
+		${v} = finishUtf8(${v}, source)
+		`
+		previous.push(v)
+		if (i == 1000000) // this just exists to prevent rollup from doing dead code elimination on finishUtf8
+			finishUtf8()
 	}
 	stringBuildCode += `return fromCharCode(${previous}) + readString(source)}`
 	return stringBuildCode
