@@ -270,7 +270,7 @@ export const enableNullTermination = () => nullTerminate = true
 const readString = eval(makeStringBuilder())
 
 export function compareKeys(a, b) {
-	// compare with type consistency that matches ordered-binary
+	// compare with type consistency that matches binary comparison
 	if (typeof a == 'object') {
 		if (!a) {
 			return b == null ? 0 : -1
@@ -318,3 +318,5 @@ const typeOrder = {
 	number: 3,
 	string: 4
 }
+export const MINIMUM_KEY = null
+export const MAXIMUM_KEY = Buffer.from([0xff])
