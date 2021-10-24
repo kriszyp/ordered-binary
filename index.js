@@ -19,6 +19,11 @@ const int32Array = new Int32Array(float64Array.buffer, 0, 4)
 const uint8Array6 = new Uint8Array(float64Array.buffer, 2, 6)
 const uint8Array8 = new Uint8Array(float64Array.buffer, 0, 8)
 let nullTerminate = false
+let textEncoder
+try {
+	textEncoder = new TextEncoder()
+} catch (error) {}
+
 /*
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
@@ -32,7 +37,7 @@ export function writeKey(key, target, position, inSequence) {
 		let c1 = key.charCodeAt(0)
 		if (c1 < 28) // escape character
 			target[position++] = 27
-		if (strLength < 0x20) {
+		if (strLength < 0x40) {
 			let i, c2
 			for (i = 0; i < strLength; i++) {
 				c1 = key.charCodeAt(i)
@@ -57,8 +62,10 @@ export function writeKey(key, target, position, inSequence) {
 					target[position++] = c1 & 0x3f | 0x80
 				}
 			}
-		} else {
+		} else if (target.utf8Write) {
 			position += target.utf8Write(key, position, 2000)
+		} else {
+			position += textEncoder.encodeInto(key, target.subarray(position)).written
 		}
 		break
 	case 'number':
