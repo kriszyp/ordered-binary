@@ -43,6 +43,7 @@ suite('key buffers', () => {
   test('string equivalence', () => {
     assert.strictEqual(fromBufferKey(toBufferKey('4')), '4')
     assert.strictEqual(fromBufferKey(toBufferKey('hello')), 'hello')
+    assert.strictEqual(fromBufferKey(toBufferKey('')), '')
   })
   test('string comparison', () => {
     assertBufferComparison(toBufferKey('4'), toBufferKey('5'))

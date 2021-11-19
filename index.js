@@ -35,7 +35,7 @@ export function writeKey(key, target, position, inSequence) {
 	case 'string':
 		let strLength = key.length
 		let c1 = key.charCodeAt(0)
-		if (c1 < 28) // escape character
+		if (!(c1 >= 28)) // escape character
 			target[position++] = 27
 		if (strLength < 0x40) {
 			let i, c2
