@@ -62,10 +62,13 @@ export function writeKey(key, target, position, inSequence) {
 					target[position++] = c1 & 0x3f | 0x80
 				}
 			}
-		} else if (target.utf8Write) {
-			position += target.utf8Write(key, position, 2000)
 		} else {
-			position += textEncoder.encodeInto(key, target.subarray(position)).written
+			if (target.utf8Write)
+				position += target.utf8Write(key, position)
+			else
+				position += textEncoder.encodeInto(key, target.subarray(position)).written
+			if (position > target.length - 4)
+				throw new RangeError('String does not fit in target buffer')
 		}
 		break
 	case 'number':
