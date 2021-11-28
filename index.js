@@ -329,4 +329,4 @@ const typeOrder = {
 	string: 4
 }
 export const MINIMUM_KEY = null
-export const MAXIMUM_KEY = Buffer.from([0xff])
+export const MAXIMUM_KEY = new Uint8Array([0xff])
