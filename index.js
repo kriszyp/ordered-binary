@@ -208,9 +208,12 @@ export function readKey(buffer, start, end, inSequence) {
 	}
 	return value
 }
+export const enableNullTermination = () => nullTerminate = true
+
 export const encoder = {
 	writeKey,
 	readKey,
+	enableNullTermination,
 }
 export const toBufferKey = (key) => {
 	let buffer = Buffer.alloc(2048)
@@ -274,8 +277,6 @@ function finishUtf8(byte1, src) {
 		return byte1
 	}
 }
-
-export const enableNullTermination = () => nullTerminate = true
 
 const readString = eval(makeStringBuilder())
 
