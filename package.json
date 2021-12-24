@@ -14,6 +14,7 @@
     "test": "mocha tests -u tdd"
   },
   "type": "module",
+  "main": "dist/index.cjs",
   "module": "index.js",
   "exports": {
     ".": {
