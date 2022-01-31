@@ -32,3 +32,8 @@ The main module exports these functions:
 `toBufferKey(jsPrimitive)` - This accepts a string, number, or boolean as the argument, and returns a `Buffer`.
 
 `fromBufferKey(bufferKey, multiple)` - This accepts a Buffer and returns a JavaScript primitive value. This can also parse buffers that hold multiple values delimited by a byte `30`, by setting the second argument to true (in which case it will return an array).
+
+And these constants:
+
+`MINIMUM_KEY` - The minimum key supported (`null`, which is represented as single zero byte)
+`MAXIMUM_KEY` - A maximum key larger than any supported primitive (single 0xff byte)
