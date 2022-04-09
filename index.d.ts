@@ -3,7 +3,7 @@ type Key = Key[] | string | symbol | number | boolean | Uint8Array;
 export function writeKey(key: Key, target: Uint8Array, position: number, inSequence?: boolean): number;
 /** Reads a key from the provided buffer, from the given range */
 export function readKey(buffer: Uint8Array, start: number, end: number, inSequence?: boolean): Key;
-/** Converts Key to Buffer */
+/** Converts key to a Buffer. This is generally much slower than using writeKey since it involves a full buffer allocation, and should be avoided for performance sensitive code. */
 export function toBufferKey(key: Key): Buffer;
 /** Coverts Buffer to Key */
 export function fromBufferKey(source: Buffer): Key;
