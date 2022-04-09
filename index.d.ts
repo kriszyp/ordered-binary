@@ -3,6 +3,10 @@ type Key = Key[] | string | symbol | number | boolean | Uint8Array;
 export function writeKey(key: Key, target: Uint8Array, position: number, inSequence?: boolean): number;
 /** Reads a key from the provided buffer, from the given range */
 export function readKey(buffer: Uint8Array, start: number, end: number, inSequence?: boolean): Key;
+/** Converts Key to Buffer */
+export function toBufferKey(key: Key): Buffer;
+/** Coverts Buffer to Key */
+export function fromBufferKey(source: Buffer): Key;
 /** Compares two keys, returning -1 if `a` comes before `b` in the ordered binary representation of the keys, or 1 if `a` comes after `b`, or 0 if they are equivalent */
 export function compareKeys(a: Key, b: Key): number;
 /** The minimum key, with the "first" binary representation (one byte of zero) */
