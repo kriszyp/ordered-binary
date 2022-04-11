@@ -16,8 +16,6 @@ control character types:
 
 const float64Array = new Float64Array(2)
 const int32Array = new Int32Array(float64Array.buffer, 0, 4)
-const uint8Array6 = new Uint8Array(float64Array.buffer, 2, 6)
-const uint8Array8 = new Uint8Array(float64Array.buffer, 0, 8)
 let nullTerminate = false
 let textEncoder
 try {
