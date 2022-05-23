@@ -178,18 +178,18 @@ export function readKey(buffer, start, end, inSequence) {
 		position += 9
 	}
 	} else {
-	if (controlByte == 27) {
-		position++
-	}
-	value = readString(buffer)
-	/*let strStart = position
-	let strEnd = end
-	for (; position < end; position++) {
-		if (buffer[position] == 0) {
-		break
+		if (controlByte == 27) {
+			position++
 		}
-	}
-	value = buffer.toString('utf8', strStart, position++)*/
+		value = readString(buffer)
+		/*let strStart = position
+		let strEnd = end
+		for (; position < end; position++) {
+			if (buffer[position] == 0) {
+			break
+			}
+		}
+		value = buffer.toString('utf8', strStart, position++)*/
 	}
 	while (position < end) {
 		if (buffer[position] === 0)
@@ -213,12 +213,34 @@ export const encoder = {
 	readKey,
 	enableNullTermination,
 }
+let targetBuffer = []
+let targetPosition = 0
+const hasNodeBuffer = typeof Buffer !== 'undefined'
+const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 export const toBufferKey = (key) => {
-	let buffer = Buffer.alloc(2048)
-	return buffer.slice(0, writeKey(key, buffer, 0, 2048) + 1)
+	let newBuffer
+	if (targetPosition + 100 > targetBuffer.length) {
+		targetBuffer = new ByteArrayAllocate(8192)
+		targetPosition = 0
+		newBuffer = true
+	}
+	try {
+		let result = targetBuffer.slice(targetPosition, targetPosition = writeKey(key, targetBuffer, targetPosition))
+		if (targetPosition > targetBuffer.length) {
+			if (newBuffer)
+				throw new Error('Key is too large')
+			return toBufferKey(key)
+		}
+		return result
+	} catch(error) {
+		if (newBuffer)
+			throw error
+		targetPosition = targetBuffer.length
+		return toBufferKey(key)
+	}
 }
 export const fromBufferKey = (sourceBuffer) => {
-	return readKey(sourceBuffer, 0, sourceBuffer.length - 1)
+	return readKey(sourceBuffer, 0, sourceBuffer.length)
 }
 const fromCharCode = String.fromCharCode
 function makeStringBuilder() {
@@ -228,7 +250,7 @@ function makeStringBuilder() {
 		let v = fromCharCode((i & 0xf) + 97) + fromCharCode((i >> 4) + 97)
 		stringBuildCode += `
 		let ${v} = source[position++]
-		if (${v} === 0)
+		if (!${v})
 		return fromCharCode(${previous})
 		else if (${v} >= 0x80)
 		${v} = finishUtf8(${v}, source)
