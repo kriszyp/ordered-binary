@@ -95,7 +95,7 @@ export function writeKey(key, target, position, inSequence) {
 		return position + length;
 	case 'object':
 		if (key) {
-			if (key instanceof Array) {
+			if (Array.isArray(key)) {
 				for (let i = 0, l = key.length; i < l; i++) {
 					if (i > 0)
 						target[position++] = 0
