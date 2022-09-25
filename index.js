@@ -39,7 +39,10 @@ export function writeKey(key, target, position, inSequence) {
 			let i, c2
 			for (i = 0; i < strLength; i++) {
 				c1 = key.charCodeAt(i)
-				if (c1 < 0x80) {
+				if (c1 <= 4) {
+					target[position++] = 4
+					target[position++] = c1
+				} else if (c1 < 0x80) {
 					target[position++] = c1
 				} else if (c1 < 0x800) {
 					target[position++] = c1 >> 6 | 0xc0
@@ -250,10 +253,14 @@ function makeStringBuilder() {
 		let v = fromCharCode((i & 0xf) + 97) + fromCharCode((i >> 4) + 97)
 		stringBuildCode += `
 		let ${v} = source[position++]
-		if (!${v})
-		return fromCharCode(${previous})
-		else if (${v} >= 0x80)
-		${v} = finishUtf8(${v}, source)
+		if (${v} > 4) {
+			if (${v} >= 0x80) ${v} = finishUtf8(${v}, source)
+		} else {
+			if (${v} === 4)
+				${v} = source[position++]
+			else
+				return fromCharCode(${previous})
+		}
 		`
 		previous.push(v)
 		if (i == 1000000) // this just exists to prevent rollup from doing dead code elimination on finishUtf8

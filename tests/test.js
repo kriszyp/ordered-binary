@@ -44,6 +44,8 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey('4')), '4')
     assert.strictEqual(fromBufferKey(toBufferKey('hello')), 'hello')
     assert.strictEqual(fromBufferKey(toBufferKey('')), '')
+    assert.strictEqual(fromBufferKey(toBufferKey('\x00')), '\x00')
+    assert.strictEqual(fromBufferKey(toBufferKey('\x03test\x01\x00')), '\x03test\x01\x00')
   })
   test('string comparison', () => {
     assertBufferComparison(toBufferKey('4'), toBufferKey('5'))
@@ -64,8 +66,8 @@ suite('key buffers', () => {
       ['hello', 5.25])
     assert.deepEqual(fromBufferKey(toBufferKey([true, 1503579323825])),
       [true, 1503579323825])
-    assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, 'second'])),
-      [-0.2525, 'second'])
+    assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, 'sec\x00nd'])),
+      [-0.2525, 'sec\x00nd'])
     assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, '2nd', '3rd'])),
       [-0.2525, '2nd', '3rd'])
   })
