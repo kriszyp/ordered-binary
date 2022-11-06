@@ -65,7 +65,7 @@ export function writeKey(key, target, position, inSequence) {
 			}
 		} else {
 			if (target.utf8Write)
-				position += target.utf8Write(key, position)
+				position += target.utf8Write(key, position, 0xffffffff)
 			else
 				position += textEncoder.encodeInto(key, target.subarray(position)).written
 			if (position > target.length - 4)
@@ -305,7 +305,23 @@ function finishUtf8(byte1, src) {
 	}
 }
 
-const readString = eval(makeStringBuilder())
+const readString =
+	typeof process !== 'undefined' && process.isBun ? // the eval in bun doesn't properly closure on position, so we
+		// have to manually update it
+		(function(reading) {
+			let { setPosition, getPosition, readString } = reading;
+			return (source) => {
+				setPosition(position);
+				let value = readString(source);
+				position = getPosition();
+				return value;
+			};
+		})((new Function('fromCharCode', 'let position; let readString = ' + makeStringBuilder() +
+			';return {' +
+			'setPosition(p) { position = p },' +
+			'getPosition() { return position },' +
+			'readString }'))(fromCharCode)) :
+		eval(makeStringBuilder())
 
 export function compareKeys(a, b) {
 	// compare with type consistency that matches binary comparison
