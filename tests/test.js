@@ -46,6 +46,7 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey('')), '')
     assert.strictEqual(fromBufferKey(toBufferKey('\x00')), '\x00')
     assert.strictEqual(fromBufferKey(toBufferKey('\x03test\x01\x00')), '\x03test\x01\x00')
+    assert.strictEqual(fromBufferKey(toBufferKey('prance 🧚🏻‍♀️🩷')), 'prance 🧚🏻‍♀️🩷')
   })
   test('string comparison', () => {
     assertBufferComparison(toBufferKey('4'), toBufferKey('5'))

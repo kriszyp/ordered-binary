@@ -284,20 +284,19 @@ function finishUtf8(byte1, src) {
 	} else if ((byte1 & 0xf8) === 0xf0) {
 		// 4 bytes
 		if (pendingSurrogate) {
-		byte1 = pendingSurrogate
-		pendingSurrogate = null
-		position += 3
-		return byte1
+			byte1 = pendingSurrogate
+			pendingSurrogate = null
+			position += 3
+			return byte1
 		}
 		const byte2 = src[position++] & 0x3f
 		const byte3 = src[position++] & 0x3f
 		const byte4 = src[position++] & 0x3f
 		let unit = ((byte1 & 0x07) << 0x12) | (byte2 << 0x0c) | (byte3 << 0x06) | byte4
 		if (unit > 0xffff) {
-		unit -= 0x10000
-		unit = 0xdc00 | (unit & 0x3ff)
-		pendingSurrogate = ((unit >>> 10) & 0x3ff) | 0xd800
-		position -= 4 // reset so we can return the next part of the surrogate pair
+			pendingSurrogate = 0xdc00 | (unit & 0x3ff)
+			unit = (((unit - 0x10000) >>> 10) & 0x3ff) | 0xd800
+			position -= 4 // reset so we can return the next part of the surrogate pair
 		}
 		return unit
 	} else {
