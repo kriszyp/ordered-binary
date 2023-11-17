@@ -14,6 +14,8 @@ control character types:
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
 
+import exp from "constants"
+
 const float64Array = new Float64Array(2)
 const int32Array = new Int32Array(float64Array.buffer, 0, 4)
 let nullTerminate = false
@@ -110,7 +112,7 @@ export function writeKey(key, target, position, inSequence) {
 				position += key.length
 				break
 			} else {
-				throw new Error('Unable to serialize object as a key')
+				throw new Error('Unable to serialize object as a key: ' + JSON.stringify(key))
 			}
 		} else // null
 			target[position++] = 0
@@ -119,7 +121,33 @@ export function writeKey(key, target, position, inSequence) {
 		targetView.setUint32(position++, key ? 7 : 6, true)
 		return position
 	case 'bigint':
-		return writeKey(Number(key), target, position, inSequence)
+		let asFloat = Number(key)
+		if (BigInt(asFloat) > key) {
+			float64Array[0] = asFloat;
+			if (int32Array[0])
+				int32Array[0]--;
+			else {
+				int32Array[1]--;
+				int32Array[0] = 0xffffffff;
+			}
+			asFloat = float64Array[0];
+		}
+		position = writeKey(asFloat, target, position, inSequence)
+		let difference = key - BigInt(asFloat);
+		if (difference === 0n) return position;
+		let exponent = BigInt((int32Array[1] >> 20) - 1079);
+		let nextByte = difference >> exponent;
+		target[position - 1] |= Number(nextByte);
+		difference -= nextByte << exponent;
+		let first = true;
+		while (difference || first) {
+			first = false;
+			exponent -= 7n;
+			let nextByte = difference >> exponent;
+			target[position++] = Number(nextByte) | 0x80;
+			difference -= nextByte << exponent;
+		}
+		return position;
 	case 'undefined':
 		return position
 	// undefined is interpreted as the absence of a key, signified by zero length
@@ -141,45 +169,57 @@ export function readKey(buffer, start, end, inSequence) {
 	let controlByte = buffer[position]
 	let value
 	if (controlByte < 24) {
-	if (controlByte < 8) {
-		position++
-		if (controlByte == 6) {
-			value = false
-		} else if (controlByte == 7) {
-			value = true
-		} else if (controlByte == 0) {
-			value = null
-		} else if (controlByte == 2) {
-			value = Symbol.for(readString(buffer))
-		} else
-			return Uint8Array.prototype.slice.call(buffer, start, end)
-	} else {
-		let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
-		let highInt = dataView.getInt32(position) << 4
-		let size = end - position
-		let lowInt
-		if (size > 4) {
-			lowInt = dataView.getInt32(position + 4)
-			highInt |= lowInt >>> 28
-			if (size <= 6) { // clear the last bits
-				lowInt &= -0x1000
+		if (controlByte < 8) {
+			position++
+			if (controlByte == 6) {
+				value = false
+			} else if (controlByte == 7) {
+				value = true
+			} else if (controlByte == 0) {
+				value = null
+			} else if (controlByte == 2) {
+				value = Symbol.for(readString(buffer))
+			} else
+				return Uint8Array.prototype.slice.call(buffer, start, end)
+		} else {
+			let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+			let highInt = dataView.getInt32(position) << 4
+			let size = end - position
+			let lowInt
+			if (size > 4) {
+				lowInt = dataView.getInt32(position + 4)
+				highInt |= lowInt >>> 28
+				if (size <= 6) { // clear the last bits
+					lowInt &= -0x1000
+				}
+				lowInt = lowInt << 4
+				if (size > 8) {
+					lowInt = lowInt | buffer[position + 8] >> 4
+				}
+			} else
+				lowInt = 0
+			if (controlByte < 16) {
+				// negative gets negated
+				highInt = highInt ^ 0x7fffffff
+				lowInt = ~lowInt
 			}
-			lowInt = lowInt << 4
-			if (size > 8) {
-				lowInt = lowInt | buffer[position + 8] >> 4
+			int32Array[1] = highInt
+			int32Array[0] = lowInt
+			value = float64Array[0]
+			position += 9
+			if (size > 9 && buffer[position] > 0) {
+				// convert the float to bigint, and then we will add precision as we enumerate through the
+				// extra bytes
+				value = BigInt(value);
+				let exponent = highInt >> 20;
+				// TODO: negatives?
+				let next_byte = buffer[position - 1] & 0xf;
+				value += BigInt(next_byte) << BigInt(exponent - 1079);
+				while ((next_byte = buffer[position]) > 0 && position++ < end) {
+					value += BigInt(next_byte & 0x7f) << BigInt((start - position) * 7 + exponent - 1016);
+				}
 			}
-		} else
-			lowInt = 0
-		if (controlByte < 16) {
-			// negative gets negated
-			highInt = highInt ^ 0x7fffffff
-			lowInt = ~lowInt
 		}
-		int32Array[1] = highInt
-		int32Array[0] = lowInt
-		value = float64Array[0]
-		position += 9
-	}
 	} else {
 		if (controlByte == 27) {
 			position++

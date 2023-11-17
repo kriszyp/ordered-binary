@@ -40,6 +40,17 @@ suite('key buffers', () => {
     assertBufferComparison(toBufferKey(-0.001), toBufferKey(-0.000001))
     assertBufferComparison(toBufferKey(-5236532532532), toBufferKey(-5236532532531))
   })
+  test('bigint equivalence', () => {
+    assert.strictEqual(fromBufferKey(toBufferKey(0xfffffffffffffffffffffn)), 0xfffffffffffffffffffffn)
+    assert.strictEqual(fromBufferKey(toBufferKey(12345678901234567890n)), 12345678901234567890n)
+    assert.strictEqual(fromBufferKey(toBufferKey(132923456789012345678903533235253252353211125n)), 132923456789012345678903533235253252353211125n)
+    assert.strictEqual(fromBufferKey(toBufferKey(352n)), 352)
+  })
+  test('bigint comparison', () => {
+    assertBufferComparison(toBufferKey(0xfffffffffffffffffffffn), toBufferKey(0x100fffffffffffffffffffn))
+    assertBufferComparison(toBufferKey(12345678901234567890), toBufferKey(12345678901234567890n))
+  })
+
   test('string equivalence', () => {
     assert.strictEqual(fromBufferKey(toBufferKey('4')), '4')
     assert.strictEqual(fromBufferKey(toBufferKey('hello')), 'hello')
