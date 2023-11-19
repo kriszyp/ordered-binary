@@ -13,6 +13,12 @@ function assertBufferComparison(lesser, greater) {
   }
 }
 //var inspector = require('inspector'); inspector.open(9330, null, true); debugger
+let seed = 0;
+export function random() {
+	seed++;
+	let a = seed * 15485863;
+	return ((a * a * a) % 2038074743) / 2038074743;
+}
 
 suite('key buffers', () => {
 
@@ -41,10 +47,17 @@ suite('key buffers', () => {
     assertBufferComparison(toBufferKey(-5236532532532), toBufferKey(-5236532532531))
   })
   test('bigint equivalence', () => {
+    assert.strictEqual(fromBufferKey(toBufferKey(6135421331404949076605986n)), 6135421331404949076605986n)
     assert.strictEqual(fromBufferKey(toBufferKey(0xfffffffffffffffffffffn)), 0xfffffffffffffffffffffn)
     assert.strictEqual(fromBufferKey(toBufferKey(12345678901234567890n)), 12345678901234567890n)
     assert.strictEqual(fromBufferKey(toBufferKey(132923456789012345678903533235253252353211125n)), 132923456789012345678903533235253252353211125n)
     assert.strictEqual(fromBufferKey(toBufferKey(352n)), 352)
+    let num = 5325n
+    for (let i = 0; i < 1100; i++) {
+      num *= BigInt(Math.floor(random() * 3 + 1));
+      num -= BigInt(Math.floor(random() * 1000));
+      assert.strictEqual(BigInt(fromBufferKey(toBufferKey(num))), num)
+    }
   })
   test('bigint comparison', () => {
     assertBufferComparison(toBufferKey(0xfffffffffffffffffffffn), toBufferKey(0x100fffffffffffffffffffn))

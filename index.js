@@ -132,9 +132,11 @@ export function writeKey(key, target, position, inSequence) {
 			}
 			asFloat = float64Array[0];
 		}
-		position = writeKey(asFloat, target, position, inSequence)
 		let difference = key - BigInt(asFloat);
-		if (difference === 0n) return position;
+		if (difference === 0n)
+			return writeKey(asFloat, target, position, inSequence)
+		writeKey(asFloat, target, position, inSequence)
+		position += 9; // always increment by 9 if we are adding fractional bits
 		let exponent = BigInt((int32Array[1] >> 20) - 1079);
 		let nextByte = difference >> exponent;
 		target[position - 1] |= Number(nextByte);
