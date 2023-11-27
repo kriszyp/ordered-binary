@@ -50,6 +50,9 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey(6135421331404949076605986n)), 6135421331404949076605986n)
     assert.strictEqual(fromBufferKey(toBufferKey(0xfffffffffffffffffffffn)), 0xfffffffffffffffffffffn)
     assert.strictEqual(fromBufferKey(toBufferKey(12345678901234567890n)), 12345678901234567890n)
+    assert.deepEqual(fromBufferKey(toBufferKey([12345678901234567890n, 44])), [12345678901234567890n, 44])
+    assert.deepEqual(fromBufferKey(toBufferKey(['hi', 12345678901234567890n])), ['hi', 12345678901234567890n])
+    assert.deepEqual(fromBufferKey(toBufferKey([6135421331404949076605986n, 'after'])), [6135421331404949076605986n, 'after'])
     assert.strictEqual(fromBufferKey(toBufferKey(132923456789012345678903533235253252353211125n)), 132923456789012345678903533235253252353211125n)
     assert.strictEqual(fromBufferKey(toBufferKey(352n)), 352)
     let num = 5325n
