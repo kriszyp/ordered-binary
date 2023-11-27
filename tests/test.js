@@ -61,6 +61,7 @@ suite('key buffers', () => {
       num -= BigInt(Math.floor(random() * 1000));
       assert.strictEqual(BigInt(fromBufferKey(toBufferKey(num))), num)
     }
+    assert.strictEqual(fromBufferKey(toBufferKey(-352n)), -352)
   })
   test('bigint comparison', () => {
     assertBufferComparison(toBufferKey(0xfffffffffffffffffffffn), toBufferKey(0x100fffffffffffffffffffn))
