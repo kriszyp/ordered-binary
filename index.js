@@ -124,11 +124,20 @@ export function writeKey(key, target, position, inSequence) {
 		let asFloat = Number(key)
 		if (BigInt(asFloat) > key) {
 			float64Array[0] = asFloat;
-			if (int32Array[0])
-				int32Array[0]--;
-			else {
-				int32Array[1]--;
-				int32Array[0] = 0xffffffff;
+			if (asFloat > 0) {
+				if (int32Array[0])
+					int32Array[0]--;
+				else {
+					int32Array[1]--;
+					int32Array[0] = 0xffffffff;
+				}
+			} else {
+				if (int32Array[0] < 0xffffffff)
+					int32Array[0]++;
+				else {
+					int32Array[1]++;
+					int32Array[0] = 0;
+				}
 			}
 			asFloat = float64Array[0];
 		}
@@ -137,7 +146,7 @@ export function writeKey(key, target, position, inSequence) {
 			return writeKey(asFloat, target, position, inSequence)
 		writeKey(asFloat, target, position, inSequence)
 		position += 9; // always increment by 9 if we are adding fractional bits
-		let exponent = BigInt((int32Array[1] >> 20) - 1079);
+		let exponent = BigInt((int32Array[1] >> 20 & 0x7ff) - 1079);
 		let nextByte = difference >> exponent;
 		target[position - 1] |= Number(nextByte);
 		difference -= nextByte << exponent;
@@ -184,7 +193,14 @@ export function readKey(buffer, start, end, inSequence) {
 			} else
 				return Uint8Array.prototype.slice.call(buffer, start, end)
 		} else {
-			let dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+			let dataView;
+			try {
+				dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, ((buffer.byteLength + 3) >> 2) << 2))
+			} catch(error) {
+				// if it is write at the end of the ArrayBuffer, we may need to retry with the exact remaining bytes
+				dataView = buffer.dataView || (buffer.dataView = new DataView(buffer.buffer, buffer.byteOffset, buffer.buffer.byteLength - buffer.byteOffset))
+			}
+
 			let highInt = dataView.getInt32(position) << 4
 			let size = end - position
 			let lowInt
@@ -213,8 +229,7 @@ export function readKey(buffer, start, end, inSequence) {
 				// convert the float to bigint, and then we will add precision as we enumerate through the
 				// extra bytes
 				value = BigInt(value);
-				let exponent = highInt >> 20;
-				// TODO: negatives?
+				let exponent = highInt >> 20 & 0x7ff;
 				let next_byte = buffer[position - 1] & 0xf;
 				value += BigInt(next_byte) << BigInt(exponent - 1079);
 				while ((next_byte = buffer[position]) > 0 && position++ < end) {

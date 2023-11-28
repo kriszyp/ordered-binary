@@ -47,6 +47,7 @@ suite('key buffers', () => {
     assertBufferComparison(toBufferKey(-5236532532532), toBufferKey(-5236532532531))
   })
   test('bigint equivalence', () => {
+    assert.strictEqual(fromBufferKey(toBufferKey(-35913040084491349n)), -35913040084491349n)
     assert.strictEqual(fromBufferKey(toBufferKey(6135421331404949076605986n)), 6135421331404949076605986n)
     assert.strictEqual(fromBufferKey(toBufferKey(0xfffffffffffffffffffffn)), 0xfffffffffffffffffffffn)
     assert.strictEqual(fromBufferKey(toBufferKey(12345678901234567890n)), 12345678901234567890n)
@@ -60,6 +61,7 @@ suite('key buffers', () => {
       num *= BigInt(Math.floor(random() * 3 + 1));
       num -= BigInt(Math.floor(random() * 1000));
       assert.strictEqual(BigInt(fromBufferKey(toBufferKey(num))), num)
+      assert.strictEqual(BigInt(fromBufferKey(toBufferKey(-num))), -num)
     }
     assert.strictEqual(fromBufferKey(toBufferKey(-352n)), -352)
   })
