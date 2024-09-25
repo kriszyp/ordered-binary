@@ -27,6 +27,7 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey(-4)), -4)
     assert.strictEqual(fromBufferKey(toBufferKey(3.4)), 3.4)
     assert.strictEqual(fromBufferKey(toBufferKey(Math.PI)), Math.PI)
+    assert.strictEqual(fromBufferKey(toBufferKey(2002225)), 2002225)
     assert.strictEqual(fromBufferKey(toBufferKey(9377288)), 9377288)
     assert.strictEqual(fromBufferKey(toBufferKey(1503579323825)), 1503579323825)
     assert.strictEqual(fromBufferKey(toBufferKey(1503579323825.3523532)), 1503579323825.3523532)
@@ -35,6 +36,18 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey(-0.00005032)), -0.00005032)
     assert.strictEqual(fromBufferKey(toBufferKey(0.00000000000000000000000005431)), 0.00000000000000000000000005431)
   })
+  test('within buffer equivalence', () => {
+    let buffer = Buffer.alloc(1024, 0xff);
+    let length = writeKey(2002225, buffer, 0);
+    let position = length;
+    buffer[position++] = 0xff;
+    buffer[position++] = 0xff;
+    assert.strictEqual(readKey(buffer, 0, length), 2002225);
+    length = writeKey('hello, world', buffer, 0);
+    assert.strictEqual(readKey(buffer, 0, length), 'hello, world');
+    // ensure that reading the string didn't modify the buffer after the string (or is restored at least)
+    assert.strictEqual(buffer[length], 0xff);
+  });
   test('number comparison', () => {
     assertBufferComparison(toBufferKey(4), toBufferKey(5))
     assertBufferComparison(toBufferKey(1503579323824), toBufferKey(1503579323825))
@@ -68,6 +81,9 @@ suite('key buffers', () => {
   test('bigint comparison', () => {
     assertBufferComparison(toBufferKey(0xfffffffffffffffffffffn), toBufferKey(0x100fffffffffffffffffffn))
     assertBufferComparison(toBufferKey(12345678901234567890), toBufferKey(12345678901234567890n))
+    assertBufferComparison(toBufferKey(6135421331404949076605986n), toBufferKey(6135421331404949076605987n))
+    assertBufferComparison(toBufferKey(-6135421331404949076605986n), toBufferKey(-6135421331404949076605985n))
+    assertBufferComparison(toBufferKey(-35913040084491349n), toBufferKey(-35913040084491348n))
   })
 
   test('string equivalence', () => {

@@ -14,8 +14,6 @@ control character types:
 * Convert arbitrary scalar values to buffer bytes with type preservation and type-appropriate ordering
 */
 
-import exp from "constants"
-
 const float64Array = new Float64Array(2)
 const int32Array = new Int32Array(float64Array.buffer, 0, 4)
 let nullTerminate = false
@@ -175,7 +173,6 @@ export function writeKey(key, target, position, inSequence) {
 
 let position
 export function readKey(buffer, start, end, inSequence) {
-	buffer[end] = 0 // make sure it is null terminated
 	position = start
 	let controlByte = buffer[position]
 	let value
@@ -189,7 +186,7 @@ export function readKey(buffer, start, end, inSequence) {
 			} else if (controlByte == 0) {
 				value = null
 			} else if (controlByte == 2) {
-				value = Symbol.for(readString(buffer))
+				value = Symbol.for(readStringSafely(buffer, end))
 			} else
 				return Uint8Array.prototype.slice.call(buffer, start, end)
 		} else {
@@ -208,7 +205,7 @@ export function readKey(buffer, start, end, inSequence) {
 				lowInt = dataView.getInt32(position + 4)
 				highInt |= lowInt >>> 28
 				if (size <= 6) { // clear the last bits
-					lowInt &= -0x1000
+					lowInt &= -0x10000
 				}
 				lowInt = lowInt << 4
 				if (size > 8) {
@@ -241,15 +238,7 @@ export function readKey(buffer, start, end, inSequence) {
 		if (controlByte == 27) {
 			position++
 		}
-		value = readString(buffer)
-		/*let strStart = position
-		let strEnd = end
-		for (; position < end; position++) {
-			if (buffer[position] == 0) {
-			break
-			}
-		}
-		value = buffer.toString('utf8', strStart, position++)*/
+		value = readStringSafely(buffer, end)
 	}
 	while (position < end) {
 		if (buffer[position] === 0)
@@ -378,7 +367,19 @@ const readString =
 			'getPosition() { return position },' +
 			'readString }'))(fromCharCode)) :
 		eval(makeStringBuilder())
-
+function readStringSafely(source, end) {
+	if (source[end] > 0) {
+		let previous = source[end]
+		try {
+			// read string expects a null terminator, that is a 0 or undefined from reading past the end of the buffer, so we
+			// have to ensure that, but do so safely, restoring the buffer to its original state
+			source[end] = 0
+			return readString(source)
+		} finally {
+			source[end] = previous
+		}
+	} else return readString(source);
+}
 export function compareKeys(a, b) {
 	// compare with type consistency that matches binary comparison
 	if (typeof a == 'object') {
