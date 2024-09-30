@@ -1,7 +1,6 @@
 [![npm version](https://img.shields.io/npm/dw/ordered-binary)](https://www.npmjs.org/package/ordered-binary)
 [![npm version](https://img.shields.io/npm/v/ordered-binary.svg?style=flat-square)](https://www.npmjs.org/package/ordered-binary)
 [![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-<a href="https://dev.doctorevidence.com/"><img src="./assets/powers-dre.png" width="203" /></a>
 
 The ordered-binary package provides a representation of JavaScript primitives, serialized into binary format (NodeJS Buffers or Uint8Arrays), such that the binary values are naturally ordered such that it matches the natural ordering or values. For example, since -2.0321 > -2.04, then `toBufferKey(-2.0321)` will be greater than `toBufferKey(-2.04)` as a binary representation, in left-to-right evaluation. This is particular useful for storing keys as binaries with something like LMDB or LevelDB, to avoid any custom sorting.
 
