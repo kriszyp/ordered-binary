@@ -65,7 +65,7 @@ export function writeKey(key, target, position, inSequence) {
 			}
 		} else {
 			if (target.utf8Write)
-				position += target.utf8Write(key, position, 0xffffffff)
+				position += target.utf8Write(key, position, target.byteLength - position)
 			else
 				position += textEncoder.encodeInto(key, target.subarray(position)).written
 			if (position > target.length - 4)
