@@ -245,6 +245,7 @@ export function readKey(buffer, start, end, inSequence) {
 			position++
 		}
 		value = readStringSafely(buffer, end)
+		if (position < end) position-- // if have a null terminator for the string, count that as the array separator
 	}
 	while (position < end) {
 		if (buffer[position] === 0)

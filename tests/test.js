@@ -111,6 +111,8 @@ suite('key buffers', () => {
       [4, 5])
     assert.deepEqual(fromBufferKey(toBufferKey(['hello', 5.25])),
       ['hello', 5.25])
+    assert.deepEqual(fromBufferKey(toBufferKey([5, 'hello', null, 5.25])),
+      [5, 'hello', null, 5.25])
     assert.deepEqual(fromBufferKey(toBufferKey([true, 1503579323825])),
       [true, 1503579323825])
     assert.deepEqual(fromBufferKey(toBufferKey([-0.2525, 'sec\x00nd'])),
