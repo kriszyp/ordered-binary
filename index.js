@@ -208,7 +208,12 @@ export function readKey(buffer, start, end, inSequence) {
 			let size = end - position
 			let lowInt
 			if (size > 4) {
-				lowInt = dataView.getInt32(position + 4)
+				lowInt = position + 8 <= buffer.length ? dataView.getInt32(position + 4) : (
+					buffer[position + 4] << 24 |
+					buffer[position + 5] << 16 |
+					buffer[position + 6] << 8 |
+					buffer[position + 7]
+				)
 				highInt |= lowInt >>> 28
 				if (size <= 6) { // clear the last bits
 					lowInt &= -0x10000

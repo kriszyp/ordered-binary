@@ -28,6 +28,8 @@ suite('key buffers', () => {
     assert.strictEqual(fromBufferKey(toBufferKey(3.4)), 3.4)
     assert.strictEqual(fromBufferKey(toBufferKey(Math.PI)), Math.PI)
     assert.strictEqual(fromBufferKey(toBufferKey(2002225)), 2002225)
+    // check to make sure it works with a limited ArrayBuffer
+    assert.strictEqual(fromBufferKey(new Uint8Array(toBufferKey(2002225))), 2002225)
     assert.strictEqual(fromBufferKey(toBufferKey(9377288)), 9377288)
     assert.strictEqual(fromBufferKey(toBufferKey(1503579323825)), 1503579323825)
     assert.strictEqual(fromBufferKey(toBufferKey(1503579323825.3523532)), 1503579323825.3523532)
