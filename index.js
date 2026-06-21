@@ -373,7 +373,12 @@ const readString =
 				position = getPosition();
 				return value;
 			};
-		})((new Function('fromCharCode', 'let position; let readString = ' + makeStringBuilder() +
+		})((new Function('fromCharCode', 'let position; let pendingSurrogate; ' +
+			// finishUtf8 references `position`/`pendingSurrogate`, but new Function compiles
+			// in global scope and can't close over the module-level copies, so embed its
+			// source here to bind it to this function's local (synced) `position`.
+			'let finishUtf8 = ' + finishUtf8.toString() + '; ' +
+			'let readString = ' + makeStringBuilder() +
 			';return {' +
 			'setPosition(p) { position = p },' +
 			'getPosition() { return position },' +
