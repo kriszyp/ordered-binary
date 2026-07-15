@@ -1,4 +1,4 @@
-type Key = Key[] | string | symbol | number | boolean | Uint8Array;
+type Key = Key[] | null | string | symbol | number | bigint | boolean | Uint8Array;
 /** Writes a key (a primitive value) to the target buffer, starting at the given position */
 export function writeKey(key: Key, target: Uint8Array, position: number, inSequence?: boolean): number;
 /** Reads a key from the provided buffer, from the given range */
